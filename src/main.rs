@@ -1,3 +1,6 @@
+mod chunk;
+mod chunk_world;
+mod constants;
 mod generator;
 
 use bevy::{
