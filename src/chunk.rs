@@ -1,11 +1,21 @@
 use bevy::prelude::*;
 
-use crate::constants::Sd8;
+use crate::constants::*;
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Chunk {
-    pub data: Vec<Sd8>,
+
+    pub data: [Sd8; UNPADDED_CHUNK_SIZE],
     pub entity: Option<Entity>,
+}
+
+impl Default for Chunk {
+    fn default() -> Self {
+        Self {
+            data: [DEFAULT_SDF_VALUE; UNPADDED_CHUNK_SIZE],
+            entity: None,
+        }
+    }
 }
 
 #[derive(Component, Reflect, Debug)]

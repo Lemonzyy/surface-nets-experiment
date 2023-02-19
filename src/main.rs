@@ -1,5 +1,5 @@
 mod chunk;
-mod chunk_world;
+mod chunk_map;
 mod constants;
 mod generator;
 

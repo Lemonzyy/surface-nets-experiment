@@ -6,12 +6,12 @@ use bevy::{
     },
 };
 use fast_surface_nets::{ndshape::ConstShape, surface_nets, SurfaceNetsBuffer};
-use noise::{MultiFractal, NoiseFn, RidgedMulti, Seedable, Simplex};
+use ilattice::vector::ZipMap;
 use rand::Rng;
 
 use crate::{
     chunk::{Chunk, ChunkCoord, ChunkGenerated, ChunkMeshed},
-    chunk_world::ChunkWorld,
+    chunk_map::ChunkMap,
     constants::*,
 };
 
@@ -20,29 +20,33 @@ pub struct GeneratorPlugin;
 impl Plugin for GeneratorPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<ChunkCoord>()
-            .init_resource::<ChunkWorld>()
-            .add_startup_system(setup)
+            .insert_resource(ChunkMap::from_sdf(|p| {
+                let pf = p.as_vec3();
+                let c = Vec3::new(68.0, 68.0, 68.0);
+                // q = mod(pf+0.5*c,c)-0.5*c;
+                let q = (pf + 0.5 * c).zip_map(c, |c1, c2| c1 % c2) - 0.5 * c;
+
+                fn sphere(p: Vec3) -> Sd8 {
+                    (p.length() - 32.0).into()
+                }
+
+                sphere(q)
+            }))
+            .add_startup_system(spawn_chunks)
             .add_system(generate_chunks)
-            .add_system(generate_meshes);
+            .add_system(generate_chunk_meshes);
     }
 }
 
-fn setup(mut commands: Commands) {
-    let chunks_extent =
-        Extent3i::from_min_and_lub(IVec3::from([-4, -2, -4]), IVec3::from_array([4, 2, 4]));
+fn spawn_chunks(mut commands: Commands) {
+    let chunks_extent = Extent3i::from_min_and_lub(IVec3::splat(-5), IVec3::splat(5));
 
-    chunks_extent.iter3().for_each(|coord| {
-        commands.spawn((
-            Name::new(format!(
-                "Chunk {{ x:{}, y:{}, z:{} }}",
-                coord.x, coord.y, coord.z
-            )),
-            ChunkCoord(coord),
-        ));
-    });
+    chunks_extent
+        .iter3()
+        .for_each(|c| spawn_chunk(c, &mut commands));
 
     let chunk_count = chunks_extent.num_points();
-    let voxel_count = chunk_count * (UnpaddedChunkShape::SIZE as u64);
+    let voxel_count = chunk_count * (UNPADDED_CHUNK_SIZE as u64);
     info!(
         "Spawning {chunk_count} chunks ({}x{}x{}) for a total of {voxel_count} voxels",
         UnpaddedChunkShape::ARRAY[0],
@@ -51,14 +55,19 @@ fn setup(mut commands: Commands) {
     );
 }
 
-fn sdf(p: IVec3) -> Sd8 {
-    const SPHERE_RADIUS: f32 = 150.0;
-    (p.as_vec3a().length() - SPHERE_RADIUS).into()
+fn spawn_chunk(coord: IVec3, commands: &mut Commands) {
+    commands.spawn((
+        Name::new(format!(
+            "Chunk {{ x:{}, y:{}, z:{} }}",
+            coord.x, coord.y, coord.z
+        )),
+        ChunkCoord(coord),
+    ));
 }
 
 fn generate_chunks(
     mut commands: Commands,
-    mut chunk_world: ResMut<ChunkWorld>,
+    mut chunk_map: ResMut<ChunkMap>,
     query: Query<(Entity, &ChunkCoord), Without<ChunkGenerated>>,
 ) {
     for (entity, chunk_coord) in &query {
@@ -66,42 +75,32 @@ fn generate_chunks(
         let chunk_min = chunk_coord * UNPADDED_CHUNK_SHAPE;
         let unpadded_chunk_extent = Extent3i::from_min_and_shape(chunk_min, UNPADDED_CHUNK_SHAPE);
 
-        let freq = 0.004;
-        let ampl = 50.0;
-        let noise = RidgedMulti::<Simplex>::default()
-            .set_frequency(freq)
-            .set_seed(442);
-
-        let mut unpadded_chunk_data = [DEFAULT_SDF_VALUE; UnpaddedChunkShape::SIZE as usize];
+        let mut chunk = Chunk {
+            entity: Some(entity),
+            ..default()
+        };
 
         unpadded_chunk_extent.iter3().for_each(|p| {
             let p_in_chunk = p - unpadded_chunk_extent.minimum;
 
-            let v = &mut unpadded_chunk_data
+            let v = &mut chunk.data
                 [UnpaddedChunkShape::linearize(p_in_chunk.as_uvec3().to_array()) as usize];
 
-            //*v = sdf(p);
-            *v = (p.y as f32 - (noise.get(p.as_dvec3().to_array()) * ampl) as f32).into();
+            *v = chunk_map.generate_voxel(p);
         });
 
-        chunk_world.insert_chunk(
-            chunk_coord,
-            Chunk {
-                data: unpadded_chunk_data.to_vec(),
-                entity: Some(entity),
-            },
-        );
+        chunk_map.insert_chunk(chunk_coord, chunk);
 
         commands.entity(entity).insert(ChunkGenerated);
     }
 }
 
 #[allow(clippy::type_complexity)]
-fn generate_meshes(
+fn generate_chunk_meshes(
     mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    chunk_world: Res<ChunkWorld>,
+    chunk_map: Res<ChunkMap>,
     query: Query<(Entity, &ChunkCoord), (With<ChunkGenerated>, Without<ChunkMeshed>)>,
 ) {
     let mut buffer = SurfaceNetsBuffer::default();
@@ -113,7 +112,7 @@ fn generate_meshes(
         let chunk_min = chunk_coord * UNPADDED_CHUNK_SHAPE;
         let padded_chunk_extent = Extent3i::from_min_and_shape(chunk_min, PADDED_CHUNK_SHAPE);
 
-        let mut samples = [DEFAULT_SDF_VALUE; PaddedChunkShape::SIZE as usize];
+        let mut samples = [DEFAULT_SDF_VALUE; PADDED_CHUNK_SIZE];
 
         let meshing_chunks = MESHING_CHUNKS_OFFSET.map(|offset| chunk_coord + offset);
 
@@ -127,7 +126,7 @@ fn generate_meshes(
             .zip(meshing_chunks.into_iter())
             .zip(meshing_chunk_intersection_extents)
             .for_each(|((offset, chunk), intersection_extent)| {
-                if let Some(chunk) = chunk_world.get_chunk(&chunk) {
+                if let Some(chunk) = chunk_map.get_chunk(&chunk) {
                     ndcopy::copy3(
                         intersection_extent.shape.as_uvec3().to_array(),
                         &chunk.data,
@@ -166,8 +165,8 @@ fn generate_meshes(
             );
             mesh.set_indices(Some(Indices::U32(buffer.indices.clone())));
 
-            mesh.duplicate_vertices();
-            mesh.compute_flat_normals();
+            // mesh.duplicate_vertices();
+            // mesh.compute_flat_normals();
 
             let mesh = meshes.add(mesh);
             let material = {
