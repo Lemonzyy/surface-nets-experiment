@@ -12,7 +12,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 use smooth_bevy_cameras::{
     controllers::fps::{FpsCameraBundle, FpsCameraController, FpsCameraPlugin},
-    LookTransformPlugin,
+    LookTransform, LookTransformPlugin,
 };
 
 fn main() {
@@ -28,6 +28,7 @@ fn main() {
         .add_plugin(FpsCameraPlugin::default())
         .add_plugin(generator::GeneratorPlugin)
         .add_startup_system(setup)
+        .add_system(camera_focus_origin)
         .run();
 }
 
@@ -51,11 +52,24 @@ fn setup(mut commands: Commands) {
         .spawn(Camera3dBundle::default())
         .insert(FpsCameraBundle::new(
             FpsCameraController {
-                translate_sensitivity: 50.0,
+                translate_sensitivity: 100.0,
                 ..default()
             },
-            Vec3::new(200.0, 200.0, 200.0),
-            Vec3::new(0., 0., 0.),
+            Vec3::splat(500.0),
+            Vec3::ZERO,
             Vec3::Y,
         ));
+}
+
+fn camera_focus_origin(
+    keys: Res<Input<KeyCode>>,
+    mut camera_query: Query<&mut LookTransform, With<FpsCameraController>>,
+) {
+    if keys.just_pressed(KeyCode::F) {
+        let Ok(mut look_transform) = camera_query.get_single_mut() else {
+            return;
+        };
+
+        look_transform.target = Vec3::ZERO;
+    }
 }

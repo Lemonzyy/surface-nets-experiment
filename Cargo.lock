@@ -3213,6 +3213,7 @@ dependencies = [
  "bevy",
  "bevy-inspector-egui",
  "fast-surface-nets",
+ "futures-lite",
  "ilattice",
  "ndcopy",
  "noise",
