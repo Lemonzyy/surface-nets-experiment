@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use bevy::{
     prelude::*,
@@ -6,12 +6,12 @@ use bevy::{
         mesh::{Indices, VertexAttributeValues},
         render_resource::PrimitiveTopology,
     },
-    tasks::{AsyncComputeTaskPool, Task},
+    tasks::{AsyncComputeTaskPool, Task}, math::Vec3A,
 };
+use bevy_inspector_egui::quick::ResourceInspectorPlugin;
 use fast_surface_nets::{ndshape::ConstShape, surface_nets, SurfaceNetsBuffer};
 use futures_lite::future;
-use ilattice::vector::ZipMap;
-use noise::{MultiFractal, NoiseFn, RidgedMulti, Seedable, Simplex};
+use parking_lot::Mutex;
 use rand::Rng;
 
 use crate::{
@@ -26,16 +26,24 @@ impl Plugin for GeneratorPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<ChunkCoord>()
             .init_resource::<ChunkMap>()
+            .init_resource::<ChunkMapDebug>()
+            .register_type::<ChunkMapDebug>()
+            .add_plugin(ResourceInspectorPlugin::<ChunkMapDebug>::default())
             .add_startup_system(spawn_chunks)
             .add_system(spawn_chunk_generation_tasks)
             .add_system(handle_chunk_generation_tasks)
             .add_system(spawn_chunk_meshing_tasks)
-            .add_system(handle_chunk_meshing_tasks);
+            .add_system(handle_chunk_meshing_tasks)
+            .add_system(debug_generation_tasks)
+            .add_system(debug_meshing_tasks)
+            .add_system(debug_generated_chunks)
+            .add_system(debug_meshed_chunks);
     }
 }
 
 fn spawn_chunks(mut commands: Commands) {
-    let chunks_extent = Extent3i::from_min_and_lub(IVec3::new(-10, -10, -10), IVec3::new(10, 10, 10));
+    let chunks_extent = Extent3i::from_min_and_lub(IVec3::splat(-10), IVec3::splat(10));
+    // let chunks_extent = Extent3i::from_min_and_lub(IVec3::new(-20, -5, -20), IVec3::new(0, 0, 0));
 
     let chunk_entities = chunks_extent
         .iter3()
@@ -69,12 +77,17 @@ fn spawn_chunk(coord: IVec3, commands: &mut Commands) -> Entity {
 }
 
 fn signed_distance_function(p: IVec3) -> Sd8 {
-    let pf = p.as_vec3();
-    let c = Vec3::new(68.0, 68.0, 68.0);
+    let pf = p.as_vec3a();
+    let c = Vec3A::splat(65.0);
     // q = mod(pf+0.5*c,c)-0.5*c;
-    let q = (pf + 0.5 * c).zip_map(c, |c1, c2| c1 % c2) - 0.5 * c;
+    let q = modulo(pf + 0.5 * c, c) - 0.5 * c;
 
-    fn sphere(p: Vec3) -> Sd8 {
+    // From https://registry.khronos.org/OpenGL-Refpages/gl4/html/mod.xhtml
+    fn modulo(x: Vec3A, y: Vec3A) -> Vec3A {
+        x - y * (x / y).floor()
+    }
+
+    fn sphere(p: Vec3A) -> Sd8 {
         (p.length() - 32.0).into()
     }
 
@@ -96,33 +109,25 @@ fn spawn_chunk_generation_tasks(
         let chunk_min = chunk_coord * UNPADDED_CHUNK_SHAPE;
         let unpadded_chunk_extent = Extent3i::from_min_and_shape(chunk_min, UNPADDED_CHUNK_SHAPE);
 
-        let freq = 0.004;
-        let ampl = 50.0;
-        let noise = RidgedMulti::<Simplex>::default()
-            .set_frequency(freq)
-            .set_seed(442);
+        let task = task_pool.spawn(async move {
+            let mut chunk = Chunk {
+                entity: Some(entity),
+                ..default()
+            };
 
-        commands
-            .entity(entity)
-            .insert(ChunkGenerationTask(task_pool.spawn(async move {
-                let mut chunk = Chunk {
-                    entity: Some(entity),
-                    ..default()
-                };
+            unpadded_chunk_extent.iter3().for_each(|p| {
+                let p_in_chunk = p - unpadded_chunk_extent.minimum;
 
-                unpadded_chunk_extent.iter3().for_each(|p| {
-                    let p_in_chunk = p - unpadded_chunk_extent.minimum;
+                let v = &mut chunk.data
+                    [UnpaddedChunkShape::linearize(p_in_chunk.as_uvec3().to_array()) as usize];
 
-                    let v = &mut chunk.data
-                        [UnpaddedChunkShape::linearize(p_in_chunk.as_uvec3().to_array()) as usize];
+                *v = signed_distance_function(p);
+            });
 
-                    *v = signed_distance_function(p);
-                    // *v = (p.y as f32 - (noise.get(p.as_dvec3().to_array()) * ampl) as f32).into();
-                    // *v = (p.y as f32).into()
-                });
+            chunk
+        });
 
-                chunk
-            })));
+        commands.entity(entity).insert(ChunkGenerationTask(task));
     }
 }
 
@@ -164,7 +169,7 @@ fn spawn_chunk_meshing_tasks(
         let chunk_coord = chunk_coord.0;
         let meshing_chunk_coords = MESHING_CHUNKS_OFFSET.map(|offset| chunk_coord + offset);
 
-        // TODO: store pending chunks to optimize this
+        // FIXME: store pending chunks to optimize this --> some chunks can't be meshed at the boundaries of the chunk map
         for coord in &meshing_chunk_coords {
             if chunk_map.get_chunk(coord).is_none() {
                 continue 'query_loop;
@@ -247,8 +252,6 @@ fn handle_chunk_meshing_tasks(
     meshes: ResMut<Assets<Mesh>>,
     mut query: Query<(Entity, &ChunkCoord, &mut ChunkMeshingTask)>,
 ) {
-    info!("handle_chunk_meshing_tasks query length: {}", query.iter().len());
-
     let commands = Arc::new(Mutex::new(commands));
     let materials = Arc::new(Mutex::new(materials));
     let meshes = Arc::new(Mutex::new(meshes));
@@ -257,7 +260,6 @@ fn handle_chunk_meshing_tasks(
         if let Some(mesh) = future::block_on(future::poll_once(&mut task.0)) {
             commands
                 .lock()
-                .unwrap()
                 .entity(entity)
                 .insert(ChunkMeshed)
                 .remove::<ChunkMeshingTask>();
@@ -266,7 +268,7 @@ fn handle_chunk_meshing_tasks(
                 return;
             };
 
-            let mesh = meshes.lock().unwrap().add(mesh);
+            let mesh = meshes.lock().add(mesh);
             let material = {
                 let mut rng = rand::thread_rng();
                 let mut m = StandardMaterial::from(Color::rgb(
@@ -276,18 +278,54 @@ fn handle_chunk_meshing_tasks(
                 ));
                 m.perceptual_roughness = 0.6;
                 m.metallic = 0.2;
-                materials.lock().unwrap().add(m)
+                materials.lock().add(m)
             };
 
             let chunk_min = chunk_coord.0 * UNPADDED_CHUNK_SHAPE;
             let transform = Transform::from_translation(chunk_min.as_vec3());
 
-            commands.lock().unwrap().entity(entity).insert((PbrBundle {
+            commands.lock().entity(entity).insert(PbrBundle {
                 mesh,
                 material,
                 transform,
                 ..Default::default()
-            },));
+            });
         }
     });
+}
+
+#[derive(Reflect, Resource, Default)]
+struct ChunkMapDebug {
+    generation_tasks_count: usize,
+    meshing_tasks_count: usize,
+    generated_chunks_count: usize,
+    meshed_chunks_count: usize,
+}
+
+fn debug_generation_tasks(
+    mut debug: ResMut<ChunkMapDebug>,
+    query: Query<(), (With<ChunkCoord>, With<ChunkGenerationTask>)>,
+) {
+    debug.generation_tasks_count = query.iter().len();
+}
+
+fn debug_meshing_tasks(
+    mut debug: ResMut<ChunkMapDebug>,
+    query: Query<(), (With<ChunkCoord>, With<ChunkMeshingTask>)>,
+) {
+    debug.meshing_tasks_count = query.iter().len();
+}
+
+fn debug_generated_chunks(
+    mut debug: ResMut<ChunkMapDebug>,
+    query: Query<(), (With<ChunkCoord>, With<ChunkGenerated>)>,
+) {
+    debug.generated_chunks_count = query.iter().len();
+}
+
+fn debug_meshed_chunks(
+    mut debug: ResMut<ChunkMapDebug>,
+    query: Query<(), (With<ChunkCoord>, With<ChunkMeshed>)>,
+) {
+    debug.meshed_chunks_count = query.iter().len();
 }

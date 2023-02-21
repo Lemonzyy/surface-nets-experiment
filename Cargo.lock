@@ -3217,6 +3217,7 @@ dependencies = [
  "ilattice",
  "ndcopy",
  "noise",
+ "parking_lot",
  "rand 0.8.5",
  "simdnoise",
  "smooth-bevy-cameras",

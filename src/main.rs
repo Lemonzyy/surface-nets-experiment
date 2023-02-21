@@ -52,10 +52,10 @@ fn setup(mut commands: Commands) {
         .spawn(Camera3dBundle::default())
         .insert(FpsCameraBundle::new(
             FpsCameraController {
-                translate_sensitivity: 100.0,
+                translate_sensitivity: 150.0,
                 ..default()
             },
-            Vec3::splat(500.0),
+            Vec3::splat(750.0),
             Vec3::ZERO,
             Vec3::Y,
         ));

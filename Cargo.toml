@@ -17,6 +17,7 @@ futures-lite = "1.12.0"
 ilattice = { git = "https://github.com/bonsairobo/ilattice-rs" }
 ndcopy = "0.3.0"
 noise = "0.8.2"
+parking_lot = "0.12.1"
 rand = "0.8.5"
 simdnoise = "3.1.6"
 smooth-bevy-cameras = "0.7.0"
