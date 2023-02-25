@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
 use bevy::{
+    math::Vec3A,
     prelude::*,
     render::{
         mesh::{Indices, VertexAttributeValues},
         render_resource::PrimitiveTopology,
     },
-    tasks::{AsyncComputeTaskPool, Task}, math::Vec3A,
+    tasks::{AsyncComputeTaskPool, Task},
 };
 use bevy_inspector_egui::quick::ResourceInspectorPlugin;
 use fast_surface_nets::{ndshape::ConstShape, surface_nets, SurfaceNetsBuffer};

@@ -4,7 +4,6 @@ use crate::constants::*;
 
 #[derive(Clone)]
 pub struct Chunk {
-
     pub data: [Sd8; UNPADDED_CHUNK_SIZE],
     pub entity: Option<Entity>,
 }
