@@ -21,7 +21,7 @@ impl Default for Chunk {
 pub struct ChunkCoord(pub IVec3);
 
 #[derive(Component)]
-pub struct ChunkGenerated;
+pub struct NeedGenerating;
 
 #[derive(Component)]
-pub struct ChunkMeshed;
+pub struct NeedMeshing;

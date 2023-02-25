@@ -2,6 +2,7 @@ mod chunk;
 mod chunk_map;
 mod constants;
 mod generator;
+mod sdf_primitives;
 
 use bevy::{
     pbr::wireframe::WireframePlugin,

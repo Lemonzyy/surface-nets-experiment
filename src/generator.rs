@@ -16,9 +16,10 @@ use parking_lot::Mutex;
 use rand::Rng;
 
 use crate::{
-    chunk::{Chunk, ChunkCoord, ChunkGenerated, ChunkMeshed},
+    chunk::{Chunk, ChunkCoord, NeedGenerating, NeedMeshing},
     chunk_map::ChunkMap,
     constants::*,
+    sdf_primitives::{infinite_repetition, sphere},
 };
 
 pub struct GeneratorPlugin;
@@ -73,26 +74,17 @@ fn spawn_chunk(coord: IVec3, commands: &mut Commands) -> Entity {
                 coord.x, coord.y, coord.z
             )),
             ChunkCoord(coord),
+            NeedGenerating,
         ))
         .id()
 }
 
-fn signed_distance_function(p: IVec3) -> Sd8 {
-    let pf = p.as_vec3a();
-    let c = Vec3A::splat(65.0);
-    // q = mod(pf+0.5*c,c)-0.5*c;
-    let q = modulo(pf + 0.5 * c, c) - 0.5 * c;
+fn map_sdf(p: IVec3) -> Sd8 {
+    let p = p.as_vec3a();
 
-    // From https://registry.khronos.org/OpenGL-Refpages/gl4/html/mod.xhtml
-    fn modulo(x: Vec3A, y: Vec3A) -> Vec3A {
-        x - y * (x / y).floor()
-    }
-
-    fn sphere(p: Vec3A) -> Sd8 {
-        (p.length() - 32.0).into()
-    }
-
-    sphere(q)
+    // infinite_repetition(p, Vec3A::splat(80.0), |q| sphere(q, 32.0)).into()
+    infinite_repetition(p, Vec3A::splat(256.0), |q| sphere(q, 128.0)).into()
+    // sphere(p, 640.0).into()
 }
 
 #[derive(Component)]
@@ -101,11 +93,12 @@ struct ChunkGenerationTask(Task<Chunk>);
 #[allow(clippy::type_complexity)]
 fn spawn_chunk_generation_tasks(
     mut commands: Commands,
-    query: Query<(Entity, &ChunkCoord), (Without<ChunkGenerationTask>, Without<ChunkGenerated>)>,
+    mut chunk_map: ResMut<ChunkMap>,
+    query: Query<(Entity, &ChunkCoord), With<NeedGenerating>>,
 ) {
     let task_pool = AsyncComputeTaskPool::get();
 
-    for (entity, chunk_coord) in &query {
+    for (entity, chunk_coord) in query.iter() {
         let chunk_coord = chunk_coord.0;
         let chunk_min = chunk_coord * UNPADDED_CHUNK_SHAPE;
         let unpadded_chunk_extent = Extent3i::from_min_and_shape(chunk_min, UNPADDED_CHUNK_SHAPE);
@@ -122,13 +115,18 @@ fn spawn_chunk_generation_tasks(
                 let v = &mut chunk.data
                     [UnpaddedChunkShape::linearize(p_in_chunk.as_uvec3().to_array()) as usize];
 
-                *v = signed_distance_function(p);
+                *v = map_sdf(p);
             });
 
             chunk
         });
 
-        commands.entity(entity).insert(ChunkGenerationTask(task));
+        chunk_map.insert_pending_chunk(chunk_coord);
+
+        commands
+            .entity(entity)
+            .insert(ChunkGenerationTask(task))
+            .remove::<NeedGenerating>();
     }
 }
 
@@ -137,13 +135,17 @@ fn handle_chunk_generation_tasks(
     mut chunk_map: ResMut<ChunkMap>,
     mut query: Query<(Entity, &ChunkCoord, &mut ChunkGenerationTask)>,
 ) {
-    for (entity, chunk_coord, mut task) in &mut query {
+    for (entity, chunk_coord, mut task) in query.iter_mut() {
         if let Some(chunk) = future::block_on(future::poll_once(&mut task.0)) {
-            chunk_map.insert_chunk(chunk_coord.0, chunk);
+            let chunk_coord = chunk_coord.0;
+
+            chunk_map.insert_chunk(chunk_coord, chunk);
+            chunk_map.remove_pending_chunk(&chunk_coord);
+
             commands
                 .entity(entity)
-                .insert(ChunkGenerated)
-                .remove::<ChunkGenerationTask>();
+                .remove::<ChunkGenerationTask>()
+                .insert(NeedMeshing);
         }
     }
 }
@@ -155,14 +157,7 @@ struct ChunkMeshingTask(Task<Option<Mesh>>);
 fn spawn_chunk_meshing_tasks(
     mut commands: Commands,
     chunk_map: Res<ChunkMap>,
-    query: Query<
-        (Entity, &ChunkCoord),
-        (
-            With<ChunkGenerated>,
-            Without<ChunkMeshingTask>,
-            Without<ChunkMeshed>,
-        ),
-    >,
+    query: Query<(Entity, &ChunkCoord), With<NeedMeshing>>,
 ) {
     let task_pool = AsyncComputeTaskPool::get();
 
@@ -170,9 +165,9 @@ fn spawn_chunk_meshing_tasks(
         let chunk_coord = chunk_coord.0;
         let meshing_chunk_coords = MESHING_CHUNKS_OFFSET.map(|offset| chunk_coord + offset);
 
-        // FIXME: store pending chunks to optimize this --> some chunks can't be meshed at the boundaries of the chunk map
+        // FIXME: find a better solution
         for coord in &meshing_chunk_coords {
-            if chunk_map.get_chunk(coord).is_none() {
+            if chunk_map.is_pending_chunk(coord) {
                 continue 'query_loop;
             }
         }
@@ -243,7 +238,10 @@ fn spawn_chunk_meshing_tasks(
             }
         });
 
-        commands.entity(entity).insert(ChunkMeshingTask(task));
+        commands
+            .entity(entity)
+            .insert(ChunkMeshingTask(task))
+            .remove::<NeedMeshing>();
     }
 }
 
@@ -259,11 +257,7 @@ fn handle_chunk_meshing_tasks(
 
     query.par_for_each_mut(512, |(entity, chunk_coord, mut task)| {
         if let Some(mesh) = future::block_on(future::poll_once(&mut task.0)) {
-            commands
-                .lock()
-                .entity(entity)
-                .insert(ChunkMeshed)
-                .remove::<ChunkMeshingTask>();
+            commands.lock().entity(entity).remove::<ChunkMeshingTask>();
 
             let Some(mesh) = mesh else {
                 return;
@@ -297,10 +291,17 @@ fn handle_chunk_meshing_tasks(
 
 #[derive(Reflect, Resource, Default)]
 struct ChunkMapDebug {
+    need_generating_chunks_count: usize,
     generation_tasks_count: usize,
+    need_meshing_chunks_count: usize,
     meshing_tasks_count: usize,
-    generated_chunks_count: usize,
-    meshed_chunks_count: usize,
+}
+
+fn debug_generated_chunks(
+    mut debug: ResMut<ChunkMapDebug>,
+    query: Query<(), (With<ChunkCoord>, With<NeedGenerating>)>,
+) {
+    debug.need_generating_chunks_count = query.iter().len();
 }
 
 fn debug_generation_tasks(
@@ -310,23 +311,16 @@ fn debug_generation_tasks(
     debug.generation_tasks_count = query.iter().len();
 }
 
+fn debug_meshed_chunks(
+    mut debug: ResMut<ChunkMapDebug>,
+    query: Query<(), (With<ChunkCoord>, With<NeedMeshing>)>,
+) {
+    debug.need_meshing_chunks_count = query.iter().len();
+}
+
 fn debug_meshing_tasks(
     mut debug: ResMut<ChunkMapDebug>,
     query: Query<(), (With<ChunkCoord>, With<ChunkMeshingTask>)>,
 ) {
     debug.meshing_tasks_count = query.iter().len();
-}
-
-fn debug_generated_chunks(
-    mut debug: ResMut<ChunkMapDebug>,
-    query: Query<(), (With<ChunkCoord>, With<ChunkGenerated>)>,
-) {
-    debug.generated_chunks_count = query.iter().len();
-}
-
-fn debug_meshed_chunks(
-    mut debug: ResMut<ChunkMapDebug>,
-    query: Query<(), (With<ChunkCoord>, With<ChunkMeshed>)>,
-) {
-    debug.meshed_chunks_count = query.iter().len();
 }
