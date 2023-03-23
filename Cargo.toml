@@ -13,8 +13,8 @@ opt-level = 3
 lto = "thin"
 
 [dependencies]
-bevy = "0.9.1"
-bevy-inspector-egui = "0.17.0"
+bevy = "0.10.0"
+bevy-inspector-egui = "0.18.1"
 fast-surface-nets = { path = "../fast-surface-nets-rs" }
 futures-lite = "1.12.0"
 ilattice = { git = "https://github.com/bonsairobo/ilattice-rs" }
@@ -23,4 +23,4 @@ noise = "0.8.2"
 parking_lot = "0.12.1"
 rand = "0.8.5"
 simdnoise = "3.1.6"
-smooth-bevy-cameras = "0.7.0"
+smooth-bevy-cameras = "0.8.0"

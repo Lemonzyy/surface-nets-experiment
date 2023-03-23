@@ -32,14 +32,16 @@ impl Plugin for GeneratorPlugin {
             .register_type::<ChunkMapDebug>()
             .add_plugin(ResourceInspectorPlugin::<ChunkMapDebug>::default())
             .add_startup_system(spawn_chunks)
-            .add_system(spawn_chunk_generation_tasks)
-            .add_system(handle_chunk_generation_tasks)
-            .add_system(spawn_chunk_meshing_tasks)
-            .add_system(handle_chunk_meshing_tasks)
-            .add_system(debug_generation_tasks)
-            .add_system(debug_meshing_tasks)
-            .add_system(debug_generated_chunks)
-            .add_system(debug_meshed_chunks);
+            .add_systems((
+                spawn_chunk_generation_tasks,
+                handle_chunk_generation_tasks,
+                spawn_chunk_meshing_tasks,
+                handle_chunk_meshing_tasks,
+                debug_generation_tasks,
+                debug_meshing_tasks,
+                debug_generated_chunks,
+                debug_meshed_chunks,
+            ));
     }
 }
 
@@ -82,8 +84,8 @@ fn spawn_chunk(coord: IVec3, commands: &mut Commands) -> Entity {
 fn map_sdf(p: IVec3) -> Sd8 {
     let p = p.as_vec3a();
 
-    // infinite_repetition(p, Vec3A::splat(80.0), |q| sphere(q, 32.0)).into()
-    infinite_repetition(p, Vec3A::splat(256.0), |q| sphere(q, 128.0)).into()
+    infinite_repetition(p, Vec3A::splat(80.0), |q| sphere(q, 32.0)).into()
+    // infinite_repetition(p, Vec3A::splat(256.0), |q| sphere(q, 128.0)).into()
     // sphere(p, 640.0).into()
 }
 
@@ -255,38 +257,40 @@ fn handle_chunk_meshing_tasks(
     let materials = Arc::new(Mutex::new(materials));
     let meshes = Arc::new(Mutex::new(meshes));
 
-    query.par_for_each_mut(512, |(entity, chunk_coord, mut task)| {
-        if let Some(mesh) = future::block_on(future::poll_once(&mut task.0)) {
-            commands.lock().entity(entity).remove::<ChunkMeshingTask>();
+    query
+        .par_iter_mut()
+        .for_each_mut(|(entity, chunk_coord, mut task)| {
+            if let Some(mesh) = future::block_on(future::poll_once(&mut task.0)) {
+                commands.lock().entity(entity).remove::<ChunkMeshingTask>();
 
-            let Some(mesh) = mesh else {
+                let Some(mesh) = mesh else {
                 return;
             };
 
-            let mesh = meshes.lock().add(mesh);
-            let material = {
-                let mut rng = rand::thread_rng();
-                let mut m = StandardMaterial::from(Color::rgb(
-                    rng.gen_range(0.0..=1.0),
-                    rng.gen_range(0.0..=1.0),
-                    rng.gen_range(0.0..=1.0),
-                ));
-                m.perceptual_roughness = 0.6;
-                m.metallic = 0.2;
-                materials.lock().add(m)
-            };
+                let mesh = meshes.lock().add(mesh);
+                let material = {
+                    let mut rng = rand::thread_rng();
+                    let mut m = StandardMaterial::from(Color::rgb(
+                        rng.gen_range(0.0..=1.0),
+                        rng.gen_range(0.0..=1.0),
+                        rng.gen_range(0.0..=1.0),
+                    ));
+                    m.perceptual_roughness = 0.6;
+                    m.metallic = 0.2;
+                    materials.lock().add(m)
+                };
 
-            let chunk_min = chunk_coord.0 * UNPADDED_CHUNK_SHAPE;
-            let transform = Transform::from_translation(chunk_min.as_vec3());
+                let chunk_min = chunk_coord.0 * UNPADDED_CHUNK_SHAPE;
+                let transform = Transform::from_translation(chunk_min.as_vec3());
 
-            commands.lock().entity(entity).insert(PbrBundle {
-                mesh,
-                material,
-                transform,
-                ..Default::default()
-            });
-        }
-    });
+                commands.lock().entity(entity).insert(PbrBundle {
+                    mesh,
+                    material,
+                    transform,
+                    ..Default::default()
+                });
+            }
+        });
 }
 
 #[derive(Reflect, Resource, Default)]

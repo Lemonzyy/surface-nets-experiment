@@ -7,7 +7,10 @@ mod sdf_primitives;
 use bevy::{
     pbr::wireframe::WireframePlugin,
     prelude::*,
-    render::settings::{WgpuFeatures, WgpuSettings},
+    render::{
+        settings::{WgpuFeatures, WgpuSettings},
+        RenderPlugin,
+    },
 };
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
@@ -18,13 +21,14 @@ use smooth_bevy_cameras::{
 
 fn main() {
     App::new()
-        .insert_resource(WgpuSettings {
-            features: WgpuFeatures::POLYGON_MODE_LINE,
-            ..Default::default()
-        })
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(RenderPlugin {
+            wgpu_settings: WgpuSettings {
+                features: WgpuFeatures::POLYGON_MODE_LINE,
+                ..Default::default()
+            },
+        }))
         .add_plugin(WireframePlugin)
-        .add_plugin(WorldInspectorPlugin)
+        .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(LookTransformPlugin)
         .add_plugin(FpsCameraPlugin::default())
         .add_plugin(generator::GeneratorPlugin)
