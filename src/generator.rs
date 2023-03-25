@@ -107,7 +107,7 @@ fn ui_add_chunk(
     });
 }
 
-pub fn map_sdf(p: IVec3) -> Sd8 {
+fn map_sdf(p: IVec3) -> Sd8 {
     let p = p.as_vec3a();
 
     infinite_repetition(p, Vec3A::splat(80.0), |q| sphere(q, 32.0)).into()

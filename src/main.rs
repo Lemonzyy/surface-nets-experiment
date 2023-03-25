@@ -33,7 +33,7 @@ fn main() {
         .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(LookTransformPlugin)
         .add_plugin(FpsCameraPlugin::default())
-        // .add_plugin(generator::GeneratorPlugin)
+        .add_plugin(generator::GeneratorPlugin)
         .add_startup_system(setup)
         .add_system(camera_focus_origin)
         .run();
@@ -66,42 +66,6 @@ fn setup(mut commands: Commands) {
             Vec3::ZERO,
             Vec3::Y,
         ));
-
-    //////////////////////////////////////
-
-    use constants::*;
-    use fast_surface_nets::ndshape::ConstShape;
-
-    info!("start");
-    let start = std::time::Instant::now();
-
-    let chunks_extent = Extent3i::from_min_and_lub(IVec3::ZERO, IVec3::splat(50));
-
-    let mut chunks = Vec::new();
-    chunks.reserve(chunks_extent.num_points() as usize);
-
-    chunks_extent.iter3().for_each(|chunk_key| {
-        let chunk_min = chunk_key * UNPADDED_CHUNK_SHAPE;
-        let mut chunk = chunk::Chunk::default();
-        let unpadded_chunk_extent = Extent3i::from_min_and_shape(chunk_min, UNPADDED_CHUNK_SHAPE);
-
-        unpadded_chunk_extent.iter3().for_each(|p| {
-            let p_in_chunk = p - unpadded_chunk_extent.minimum;
-
-            let v = &mut chunk.data
-                [UnpaddedChunkShape::linearize(p_in_chunk.as_uvec3().to_array()) as usize];
-
-            *v = generator::map_sdf(p);
-        });
-
-        chunks.push(chunk);
-    });
-
-    let elapsed = start.elapsed();
-    let chunks_num = chunks_extent.num_points();
-
-    info!("took {elapsed:?} to generate {chunks_num} chunks ({:.3?} / chunk)", elapsed / chunks_num as u32);
-
 }
 
 fn camera_focus_origin(
