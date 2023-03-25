@@ -15,10 +15,8 @@ impl Default for ChunkData {
     }
 }
 
-#[derive(Component, Reflect, Debug)]
-pub struct Chunk {
-    pub key: IVec3,
-}
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Deref, DerefMut, Reflect)]
+pub struct ChunkKey(pub IVec3);
 
 #[derive(Component)]
 pub struct NeedGenerating;

@@ -16,7 +16,7 @@ use parking_lot::Mutex;
 use rand::Rng;
 
 use crate::{
-    chunk::{Chunk, ChunkData, NeedGenerating, NeedMeshing},
+    chunk::{ChunkData, ChunkKey, NeedGenerating, NeedMeshing},
     chunk_map::{ChunkMap, LoadedChunks},
     constants::*,
     sdf_primitives::{infinite_repetition, sphere},
@@ -26,7 +26,7 @@ pub struct GeneratorPlugin;
 
 impl Plugin for GeneratorPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<Chunk>()
+        app.register_type::<ChunkKey>()
             .init_resource::<ChunkMap>()
             .init_resource::<LoadedChunks>()
             .init_resource::<DebugUiState>()
@@ -51,7 +51,7 @@ fn spawn_chunks(mut commands: Commands) {
 
     let chunk_entities = chunks_extent
         .iter3()
-        .map(|c| spawn_chunk(c, &mut commands))
+        .map(|c| spawn_chunk(ChunkKey(c), &mut commands))
         .collect::<Vec<_>>();
 
     commands
@@ -68,11 +68,11 @@ fn spawn_chunks(mut commands: Commands) {
     );
 }
 
-fn spawn_chunk(key: IVec3, commands: &mut Commands) -> Entity {
+fn spawn_chunk(key: ChunkKey, commands: &mut Commands) -> Entity {
     commands
         .spawn((
             Name::new(format!("Chunk {{ x:{}, y:{}, z:{} }}", key.x, key.y, key.z)),
-            Chunk { key },
+            key,
             NeedGenerating,
         ))
         .id()
@@ -117,7 +117,7 @@ fn ui_debug(
             ui.add(egui::DragValue::new(&mut ui_state.chunk_key.2));
         });
         if ui.button("Add chunk").clicked() {
-            spawn_chunk(IVec3::from(ui_state.chunk_key), &mut commands);
+            spawn_chunk(ChunkKey(IVec3::from(ui_state.chunk_key)), &mut commands);
         }
     });
 }
@@ -137,12 +137,12 @@ struct ChunkGenerationTask(Task<ChunkData>);
 fn spawn_chunk_generation_tasks(
     mut commands: Commands,
     mut chunk_map: ResMut<ChunkMap>,
-    query: Query<(Entity, &Chunk), With<NeedGenerating>>,
+    query: Query<(Entity, &ChunkKey), With<NeedGenerating>>,
 ) {
     let task_pool = AsyncComputeTaskPool::get();
 
-    for (entity, chunk) in query.iter() {
-        let chunk_min = chunk.key * UNPADDED_CHUNK_SHAPE;
+    for (entity, chunk_key) in query.iter() {
+        let chunk_min = chunk_key.0 * UNPADDED_CHUNK_SHAPE;
         let unpadded_chunk_extent = Extent3i::from_min_and_shape(chunk_min, UNPADDED_CHUNK_SHAPE);
 
         let task = task_pool.spawn(async move {
@@ -172,11 +172,11 @@ fn spawn_chunk_generation_tasks(
 fn handle_chunk_generation_tasks(
     mut commands: Commands,
     mut chunk_map: ResMut<ChunkMap>,
-    mut query: Query<(Entity, &Chunk, &mut ChunkGenerationTask)>,
+    mut query: Query<(Entity, &ChunkKey, &mut ChunkGenerationTask)>,
 ) {
-    for (entity, chunk, mut task) in query.iter_mut() {
+    for (entity, chunk_key, mut task) in query.iter_mut() {
         if let Some(chunk_data) = future::block_on(future::poll_once(&mut task.0)) {
-            chunk_map.insert_chunk(chunk.key, chunk_data);
+            chunk_map.insert_chunk(*chunk_key, chunk_data);
             // chunk_map.remove_pending_chunk(&chunk_coord);
 
             commands
@@ -194,12 +194,12 @@ struct ChunkMeshingTask(Task<Option<Mesh>>);
 fn spawn_chunk_meshing_tasks(
     mut commands: Commands,
     chunk_map: Res<ChunkMap>,
-    query: Query<(Entity, &Chunk), With<NeedMeshing>>,
+    query: Query<(Entity, &ChunkKey), With<NeedMeshing>>,
 ) {
     let task_pool = AsyncComputeTaskPool::get();
 
-    'query_loop: for (entity, chunk) in &query {
-        let chunk_key = chunk.key;
+    'query_loop: for (entity, chunk_key) in &query {
+        let chunk_key = chunk_key.0;
         let meshing_chunk_keys = MESHING_CHUNKS_OFFSET.map(|offset| chunk_key + offset);
 
         // FIXME: find a better solution
@@ -223,8 +223,8 @@ fn spawn_chunk_meshing_tasks(
             .into_iter()
             .zip(meshing_chunk_keys.into_iter())
             .zip(meshing_chunk_intersection_extents)
-            .for_each(|((offset, chunk), intersection_extent)| {
-                if let Some(chunk) = chunk_map.get_chunk(&chunk) {
+            .for_each(|((offset, key), intersection_extent)| {
+                if let Some(chunk) = chunk_map.get_chunk(&ChunkKey(key)) {
                     ndcopy::copy3(
                         intersection_extent.shape.as_uvec3().to_array(),
                         &chunk.sdf,
@@ -286,7 +286,7 @@ fn handle_chunk_meshing_tasks(
     commands: Commands,
     materials: ResMut<Assets<StandardMaterial>>,
     meshes: ResMut<Assets<Mesh>>,
-    mut query: Query<(Entity, &Chunk, &mut ChunkMeshingTask)>,
+    mut query: Query<(Entity, &ChunkKey, &mut ChunkMeshingTask)>,
 ) {
     let commands = Arc::new(Mutex::new(commands));
     let materials = Arc::new(Mutex::new(materials));
@@ -294,7 +294,7 @@ fn handle_chunk_meshing_tasks(
 
     query
         .par_iter_mut()
-        .for_each_mut(|(entity, chunk, mut task)| {
+        .for_each_mut(|(entity, chunk_key, mut task)| {
             if let Some(mesh) = future::block_on(future::poll_once(&mut task.0)) {
                 commands.lock().entity(entity).remove::<ChunkMeshingTask>();
 
@@ -315,7 +315,7 @@ fn handle_chunk_meshing_tasks(
                     materials.lock().add(m)
                 };
 
-                let chunk_min = chunk.key * UNPADDED_CHUNK_SHAPE;
+                let chunk_min = chunk_key.0 * UNPADDED_CHUNK_SHAPE;
                 let transform = Transform::from_translation(chunk_min.as_vec3());
 
                 commands.lock().entity(entity).insert(PbrBundle {
@@ -338,28 +338,28 @@ struct ChunkMapDebug {
 
 fn debug_generated_chunks(
     mut ui_state: ResMut<DebugUiState>,
-    query: Query<(), (With<Chunk>, With<NeedGenerating>)>,
+    query: Query<(), (With<ChunkKey>, With<NeedGenerating>)>,
 ) {
     ui_state.need_generating_chunks_count = query.iter().len();
 }
 
 fn debug_generation_tasks(
     mut ui_state: ResMut<DebugUiState>,
-    query: Query<(), (With<Chunk>, With<ChunkGenerationTask>)>,
+    query: Query<(), (With<ChunkKey>, With<ChunkGenerationTask>)>,
 ) {
     ui_state.generation_tasks_count = query.iter().len();
 }
 
 fn debug_meshed_chunks(
     mut ui_state: ResMut<DebugUiState>,
-    query: Query<(), (With<Chunk>, With<NeedMeshing>)>,
+    query: Query<(), (With<ChunkKey>, With<NeedMeshing>)>,
 ) {
     ui_state.need_meshing_chunks_count = query.iter().len();
 }
 
 fn debug_meshing_tasks(
     mut ui_state: ResMut<DebugUiState>,
-    query: Query<(), (With<Chunk>, With<ChunkMeshingTask>)>,
+    query: Query<(), (With<ChunkKey>, With<ChunkMeshingTask>)>,
 ) {
     ui_state.meshing_tasks_count = query.iter().len();
 }
