@@ -1,11 +1,10 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, utils::HashSet};
 
 use crate::chunk::Chunk;
 
 #[derive(Resource, Default)]
 pub struct ChunkMap {
     chunks: bevy::utils::HashMap<IVec3, Chunk>,
-    pending_chunks: bevy::utils::HashSet<IVec3>,
 }
 
 impl ChunkMap {
@@ -16,16 +15,20 @@ impl ChunkMap {
     pub fn get_chunk(&self, coord: &IVec3) -> Option<&Chunk> {
         self.chunks.get(coord)
     }
+}
 
-    pub fn insert_pending_chunk(&mut self, coord: IVec3) -> bool {
-        self.pending_chunks.insert(coord)
+pub struct DirtyChunks(HashSet<IVec3>);
+
+impl DirtyChunks {
+    pub fn insert(&mut self, key: IVec3) -> bool {
+        self.0.insert(key)
     }
 
-    pub fn remove_pending_chunk(&mut self, coord: &IVec3) -> bool {
-        self.pending_chunks.remove(coord)
+    pub fn iter(&mut self) -> impl Iterator<Item = &IVec3> {
+        self.0.iter()
     }
 
-    pub fn is_pending_chunk(&self, coord: &IVec3) -> bool {
-        self.pending_chunks.contains(coord)
+    pub fn clear(&mut self) {
+        self.0.clear()
     }
 }

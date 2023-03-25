@@ -107,7 +107,7 @@ fn ui_add_chunk(
     });
 }
 
-fn map_sdf(p: IVec3) -> Sd8 {
+pub fn map_sdf(p: IVec3) -> Sd8 {
     let p = p.as_vec3a();
 
     infinite_repetition(p, Vec3A::splat(80.0), |q| sphere(q, 32.0)).into()
@@ -132,10 +132,7 @@ fn spawn_chunk_generation_tasks(
         let unpadded_chunk_extent = Extent3i::from_min_and_shape(chunk_min, UNPADDED_CHUNK_SHAPE);
 
         let task = task_pool.spawn(async move {
-            let mut chunk = Chunk {
-                entity: Some(entity),
-                ..default()
-            };
+            let mut chunk = Chunk::default();
 
             unpadded_chunk_extent.iter3().for_each(|p| {
                 let p_in_chunk = p - unpadded_chunk_extent.minimum;
@@ -149,7 +146,7 @@ fn spawn_chunk_generation_tasks(
             chunk
         });
 
-        chunk_map.insert_pending_chunk(chunk_coord);
+        // chunk_map.insert_pending_chunk(chunk_coord);
 
         commands
             .entity(entity)
@@ -168,7 +165,7 @@ fn handle_chunk_generation_tasks(
             let chunk_coord = chunk_coord.0;
 
             chunk_map.insert_chunk(chunk_coord, chunk);
-            chunk_map.remove_pending_chunk(&chunk_coord);
+            // chunk_map.remove_pending_chunk(&chunk_coord);
 
             commands
                 .entity(entity)
@@ -194,11 +191,11 @@ fn spawn_chunk_meshing_tasks(
         let meshing_chunk_coords = MESHING_CHUNKS_OFFSET.map(|offset| chunk_coord + offset);
 
         // FIXME: find a better solution
-        for coord in &meshing_chunk_coords {
-            if chunk_map.is_pending_chunk(coord) {
-                continue 'query_loop;
-            }
-        }
+        // for coord in &meshing_chunk_coords {
+        //     if chunk_map.is_pending_chunk(coord) {
+        //         continue 'query_loop;
+        //     }
+        // }
 
         let chunk_min = chunk_coord * UNPADDED_CHUNK_SHAPE;
         let padded_chunk_extent = Extent3i::from_min_and_shape(chunk_min, PADDED_CHUNK_SHAPE);
