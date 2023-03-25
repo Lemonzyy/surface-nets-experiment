@@ -1,4 +1,7 @@
-use bevy::{prelude::*, utils::{HashSet, HashMap}};
+use bevy::{
+    prelude::*,
+    utils::{HashMap, HashSet},
+};
 
 use crate::chunk::ChunkData;
 
@@ -16,6 +19,9 @@ impl ChunkMap {
         self.chunks.get(key)
     }
 }
+
+#[derive(Resource, Default)]
+pub struct LoadedChunks(HashMap<IVec3, Entity>);
 
 pub struct DirtyChunks(HashSet<IVec3>);
 
