@@ -9,6 +9,7 @@ use bevy::{
     },
     tasks::{AsyncComputeTaskPool, Task},
 };
+use bevy_egui::{egui, EguiContexts};
 use bevy_inspector_egui::quick::ResourceInspectorPlugin;
 use fast_surface_nets::{ndshape::ConstShape, surface_nets, SurfaceNetsBuffer};
 use futures_lite::future;
@@ -30,6 +31,7 @@ impl Plugin for GeneratorPlugin {
             .init_resource::<ChunkMap>()
             .init_resource::<ChunkMapDebug>()
             .register_type::<ChunkMapDebug>()
+            .init_resource::<DebugUiState>()
             .add_plugin(ResourceInspectorPlugin::<ChunkMapDebug>::default())
             .add_startup_system(spawn_chunks)
             .add_systems((
@@ -41,6 +43,7 @@ impl Plugin for GeneratorPlugin {
                 debug_meshing_tasks,
                 debug_generated_chunks,
                 debug_meshed_chunks,
+                ui_add_chunk,
             ));
     }
 }
@@ -79,6 +82,29 @@ fn spawn_chunk(coord: IVec3, commands: &mut Commands) -> Entity {
             NeedGenerating,
         ))
         .id()
+}
+
+#[derive(Resource, Default)]
+struct DebugUiState {
+    chunk_coord: (i32, i32, i32),
+}
+
+fn ui_add_chunk(
+    mut commands: Commands,
+    mut contexts: EguiContexts,
+    mut ui_state: ResMut<DebugUiState>,
+) {
+    egui::Window::new("Debug").show(contexts.ctx_mut(), |ui| {
+        ui.label("Configure chunk:");
+        ui.horizontal(|ui| {
+            ui.add(egui::DragValue::new(&mut ui_state.chunk_coord.0));
+            ui.add(egui::DragValue::new(&mut ui_state.chunk_coord.1));
+            ui.add(egui::DragValue::new(&mut ui_state.chunk_coord.2));
+        });
+        if ui.button("Request chunk").clicked() {
+            spawn_chunk(IVec3::from(ui_state.chunk_coord), &mut commands);
+        }
+    });
 }
 
 fn map_sdf(p: IVec3) -> Sd8 {

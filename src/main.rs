@@ -12,6 +12,7 @@ use bevy::{
         RenderPlugin,
     },
 };
+use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 use smooth_bevy_cameras::{
@@ -28,6 +29,7 @@ fn main() {
             },
         }))
         .add_plugin(WireframePlugin)
+        .add_plugin(EguiPlugin)
         .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(LookTransformPlugin)
         .add_plugin(FpsCameraPlugin::default())
@@ -69,8 +71,13 @@ fn setup(mut commands: Commands) {
 fn camera_focus_origin(
     keys: Res<Input<KeyCode>>,
     mut camera_query: Query<&mut LookTransform, With<FpsCameraController>>,
+    mut is_focused: Local<bool>,
 ) {
     if keys.just_pressed(KeyCode::F) {
+        *is_focused = !*is_focused;
+    }
+
+    if *is_focused {
         let Ok(mut look_transform) = camera_query.get_single_mut() else {
             return;
         };
