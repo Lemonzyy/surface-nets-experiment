@@ -17,7 +17,7 @@ use rand::Rng;
 
 use crate::{
     chunk::{ChunkData, ChunkKey, NeedGenerating, NeedMeshing},
-    chunk_map::{ChunkMap, LoadedChunks},
+    chunk_map::{ChunkCommandQueue, ChunkMap, LoadedChunks},
     constants::*,
     sdf_primitives::{infinite_repetition, sphere},
 };
@@ -28,10 +28,12 @@ impl Plugin for GeneratorPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<ChunkKey>()
             .init_resource::<ChunkMap>()
+            .init_resource::<ChunkCommandQueue>()
             .init_resource::<LoadedChunks>()
             .init_resource::<DebugUiState>()
             .add_startup_system(spawn_chunks)
             .add_systems((
+                handle_chunk_creation_commands,
                 spawn_chunk_generation_tasks,
                 handle_chunk_generation_tasks,
                 spawn_chunk_meshing_tasks,
@@ -45,37 +47,51 @@ impl Plugin for GeneratorPlugin {
     }
 }
 
-fn spawn_chunks(mut commands: Commands) {
-    let chunks_extent = Extent3i::from_min_and_lub(IVec3::splat(-10), IVec3::splat(10));
-    // let chunks_extent = Extent3i::from_min_and_lub(IVec3::new(-20, -5, -20), IVec3::new(0, 0, 0));
-
-    let chunk_entities = chunks_extent
-        .iter3()
-        .map(|c| spawn_chunk(ChunkKey(c), &mut commands))
-        .collect::<Vec<_>>();
-
-    commands
-        .spawn((Name::new("Chunks"), SpatialBundle::default()))
-        .push_children(&chunk_entities);
-
-    let chunk_count = chunks_extent.num_points();
-    let voxel_count = chunk_count * (UNPADDED_CHUNK_SIZE as u64);
+fn spawn_chunks(
+    mut chunk_command_queue: ResMut<ChunkCommandQueue>,
+    loaded_chunks: Res<LoadedChunks>,
+) {
     info!(
-        "Spawning {chunk_count} chunks ({}x{}x{}) for a total of {voxel_count} voxels",
+        "Chunk size: {}x{}x{}",
         UnpaddedChunkShape::ARRAY[0],
         UnpaddedChunkShape::ARRAY[1],
         UnpaddedChunkShape::ARRAY[2],
     );
+
+    let chunks_extent = Extent3i::from_min_and_lub(IVec3::splat(-10), IVec3::splat(10));
+    // let chunks_extent = Extent3i::from_min_and_lub(IVec3::new(-20, -5, -20), IVec3::new(0, 0, 0));
+
+    let chunk_count = chunks_extent.num_points();
+
+    chunk_command_queue.create.reserve(chunk_count as usize);
+    chunks_extent.iter3().map(ChunkKey::from).for_each(|key| {
+        if loaded_chunks.get_entity(key).is_none() {
+            chunk_command_queue.create.push(key);
+        }
+    });
+
+    // TODO: replace with camera position
+    chunk_command_queue.sort(ChunkKey(IVec3::ZERO));
+
+    let voxel_count = chunk_count * (UNPADDED_CHUNK_SIZE as u64);
+
+    info!(
+        "Requested {chunk_count} chunk creation ({voxel_count} voxels) in the chunk command queue"
+    );
 }
 
-fn spawn_chunk(key: ChunkKey, commands: &mut Commands) -> Entity {
-    commands
-        .spawn((
-            Name::new(format!("Chunk {{ x:{}, y:{}, z:{} }}", key.x, key.y, key.z)),
-            key,
-            NeedGenerating,
-        ))
-        .id()
+fn handle_chunk_creation_commands(
+    mut commands: Commands,
+    mut chunk_command_queue: ResMut<ChunkCommandQueue>,
+    mut loaded_chunks: ResMut<LoadedChunks>,
+) {
+    chunk_command_queue.create.drain(..).for_each(|key| {
+        let entity = commands
+            .spawn((Name::new("Chunk"), key, NeedGenerating))
+            .id();
+
+        loaded_chunks.insert(key, entity);
+    });
 }
 
 #[derive(Resource, Default)]
@@ -117,7 +133,7 @@ fn ui_debug(
             ui.add(egui::DragValue::new(&mut ui_state.chunk_key.2));
         });
         if ui.button("Add chunk").clicked() {
-            spawn_chunk(ChunkKey(IVec3::from(ui_state.chunk_key)), &mut commands);
+            todo!(); // spawn_chunk(ChunkKey(IVec3::from(ui_state.chunk_key)), &mut commands);
         }
     });
 }
@@ -224,7 +240,7 @@ fn spawn_chunk_meshing_tasks(
             .zip(meshing_chunk_keys.into_iter())
             .zip(meshing_chunk_intersection_extents)
             .for_each(|((offset, key), intersection_extent)| {
-                if let Some(chunk) = chunk_map.get_chunk(&ChunkKey(key)) {
+                if let Some(chunk) = chunk_map.get_chunk(ChunkKey(key)) {
                     ndcopy::copy3(
                         intersection_extent.shape.as_uvec3().to_array(),
                         &chunk.sdf,

@@ -18,6 +18,12 @@ impl Default for ChunkData {
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Deref, DerefMut, Reflect)]
 pub struct ChunkKey(pub IVec3);
 
+impl From<IVec3> for ChunkKey {
+    fn from(value: IVec3) -> Self {
+        Self(value)
+    }
+}
+
 #[derive(Component)]
 pub struct NeedGenerating;
 

@@ -17,6 +17,7 @@ bevy = "0.10.0"
 bevy-inspector-egui = "0.18.1"
 bevy_egui = "0.20.1"
 fast-surface-nets = { path = "../fast-surface-nets-rs" }
+float-ord = "0.3.2"
 futures-lite = "1.12.0"
 ilattice = { git = "https://github.com/bonsairobo/ilattice-rs" }
 ndcopy = "0.3.0"
