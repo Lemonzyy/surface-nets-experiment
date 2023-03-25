@@ -1,19 +1,19 @@
-use bevy::{prelude::*, utils::HashSet};
+use bevy::{prelude::*, utils::{HashSet, HashMap}};
 
-use crate::chunk::Chunk;
+use crate::chunk::ChunkData;
 
 #[derive(Resource, Default)]
 pub struct ChunkMap {
-    chunks: bevy::utils::HashMap<IVec3, Chunk>,
+    chunks: HashMap<IVec3, ChunkData>,
 }
 
 impl ChunkMap {
-    pub fn insert_chunk(&mut self, coord: IVec3, chunk: Chunk) -> Option<Chunk> {
-        self.chunks.insert(coord, chunk)
+    pub fn insert_chunk(&mut self, key: IVec3, chunk: ChunkData) -> Option<ChunkData> {
+        self.chunks.insert(key, chunk)
     }
 
-    pub fn get_chunk(&self, coord: &IVec3) -> Option<&Chunk> {
-        self.chunks.get(coord)
+    pub fn get_chunk(&self, key: &IVec3) -> Option<&ChunkData> {
+        self.chunks.get(key)
     }
 }
 
