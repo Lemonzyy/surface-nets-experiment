@@ -7,8 +7,8 @@ pub struct ChunkData {
     pub sdf: [Sd8; UNPADDED_CHUNK_SIZE],
 }
 
-impl Default for ChunkData {
-    fn default() -> Self {
+impl ChunkData {
+    pub fn empty() -> Self {
         Self {
             sdf: [DEFAULT_SDF_VALUE; UNPADDED_CHUNK_SIZE],
         }
@@ -23,9 +23,3 @@ impl From<IVec3> for ChunkKey {
         Self(value)
     }
 }
-
-#[derive(Component)]
-pub struct NeedGenerating;
-
-#[derive(Component)]
-pub struct NeedMeshing;

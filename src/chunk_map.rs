@@ -12,12 +12,16 @@ pub struct ChunkMap {
 }
 
 impl ChunkMap {
-    pub fn insert_chunk(&mut self, key: ChunkKey, chunk: ChunkData) -> Option<ChunkData> {
+    pub fn insert(&mut self, key: ChunkKey, chunk: ChunkData) -> Option<ChunkData> {
         self.chunks.insert(key, chunk)
     }
 
-    pub fn get_chunk(&self, key: ChunkKey) -> Option<&ChunkData> {
+    pub fn get(&self, key: ChunkKey) -> Option<&ChunkData> {
         self.chunks.get(&key)
+    }
+
+    pub fn len(&self) -> usize {
+        self.chunks.len()
     }
 }
 
@@ -47,6 +51,7 @@ impl LoadedChunks {
     }
 }
 
+#[derive(Resource, Default)]
 pub struct DirtyChunks(HashSet<ChunkKey>);
 
 impl DirtyChunks {
@@ -54,11 +59,15 @@ impl DirtyChunks {
         self.0.insert(key)
     }
 
-    pub fn iter(&mut self) -> impl Iterator<Item = &ChunkKey> {
+    pub fn iter(&self) -> impl Iterator<Item = &ChunkKey> {
         self.0.iter()
     }
 
     pub fn clear(&mut self) {
         self.0.clear()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 }

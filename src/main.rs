@@ -1,6 +1,7 @@
 mod chunk;
 mod chunk_map;
 mod constants;
+mod debug;
 mod generator;
 mod sdf_primitives;
 
@@ -34,6 +35,7 @@ fn main() {
         .add_plugin(LookTransformPlugin)
         .add_plugin(FpsCameraPlugin::default())
         .add_plugin(generator::GeneratorPlugin)
+        .add_plugin(debug::DebugPlugin)
         .add_startup_system(setup)
         .add_system(camera_focus_origin)
         .run();
