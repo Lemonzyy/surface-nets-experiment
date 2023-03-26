@@ -41,7 +41,11 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: Commands) {
+fn setup(
+    mut commands: Commands,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
     info!("Starting up!");
 
     commands.spawn(DirectionalLightBundle {
@@ -68,6 +72,13 @@ fn setup(mut commands: Commands) {
             Vec3::ZERO,
             Vec3::Y,
         ));
+
+    commands.spawn(PbrBundle {
+        mesh: meshes.add(Mesh::from(shape::Cube::new(8.0))),
+        material: materials.add(Color::RED.into()),
+        transform: Transform::IDENTITY,
+        ..default()
+    });
 }
 
 fn camera_focus_origin(

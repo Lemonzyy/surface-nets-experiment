@@ -4,22 +4,19 @@ use bevy_egui::{egui, EguiContexts};
 use crate::{
     chunk::ChunkKey,
     chunk_map::{ChunkCommandQueue, ChunkMap, DirtyChunks},
-    generator::{ChunkGenerationTask, ChunkMeshingTask, ChunkSet},
+    generator::{ChunkGenerationTask, ChunkMeshingTask},
 };
 
 pub struct DebugPlugin;
 
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<DebugUiState>().add_systems(
-            (
-                ui_debug,
-                update_added_chunk_count,
-                update_generation_tasks_count,
-                update_meshing_tasks_count,
-            )
-                .before(ChunkSet::Cleanup),
-        );
+        app.init_resource::<DebugUiState>().add_systems((
+            ui_debug,
+            update_added_chunk_count,
+            update_generation_tasks_count,
+            update_meshing_tasks_count,
+        ));
     }
 }
 

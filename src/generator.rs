@@ -12,7 +12,10 @@ use rand::Rng;
 
 use crate::{
     chunk::{ChunkData, ChunkKey},
-    chunk_map::{ChunkCommandQueue, ChunkMap, DirtyChunks, LoadedChunks},
+    chunk_map::{
+        chunks_in_extent, copy_chunk_neighborhood, ChunkCommandQueue, ChunkMap, DirtyChunks,
+        LoadedChunks,
+    },
     constants::*,
     sdf_primitives::{infinite_repetition, sphere},
 };
@@ -28,30 +31,9 @@ impl Plugin for GeneratorPlugin {
             .init_resource::<DirtyChunks>()
             .add_startup_system(request_chunks)
             .add_system(handle_chunk_creation_commands)
-            .add_systems(
-                (queue_chunk_generation_tasks, handle_chunk_generation_tasks)
-                    .chain()
-                    .in_set(ChunkSet::Generation),
-            )
-            .add_systems(
-                (queue_chunk_meshing_tasks, handle_chunk_meshing_tasks)
-                    .chain()
-                    .in_set(ChunkSet::Meshing),
-            )
-            .add_system(clear_dirty_chunks.in_set(ChunkSet::Cleanup))
-            .configure_set(
-                ChunkSet::Cleanup
-                    .after(ChunkSet::Generation)
-                    .after(ChunkSet::Meshing),
-            );
+            .add_systems((queue_chunk_generation_tasks, handle_chunk_generation_tasks).chain())
+            .add_systems((queue_chunk_meshing_tasks, handle_chunk_meshing_tasks).chain());
     }
-}
-
-#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
-pub enum ChunkSet {
-    Generation,
-    Meshing,
-    Cleanup,
 }
 
 fn request_chunks(
@@ -66,6 +48,7 @@ fn request_chunks(
     );
 
     let chunks_extent = Extent3i::from_min_and_lub(IVec3::splat(-10), IVec3::splat(10));
+    // let chunks_extent = Extent3i::from_min_and_lub(IVec3::splat(-20), IVec3::splat(20));
     // let chunks_extent = Extent3i::from_min_and_lub(IVec3::new(-20, -5, -20), IVec3::new(0, 0, 0));
 
     let chunk_count = chunks_extent.num_points();
@@ -80,10 +63,10 @@ fn request_chunks(
     // TODO: replace with camera position
     chunk_command_queue.sort(ChunkKey(IVec3::ZERO));
 
-    let voxel_count = chunk_count * (UNPADDED_CHUNK_SIZE as u64);
+    let point_count = chunk_count * (UNPADDED_CHUNK_SIZE as u64);
 
     info!(
-        "Requested {chunk_count} chunk creation ({voxel_count} voxels) in the chunk command queue"
+        "Requested {chunk_count} chunk creation ({point_count} points) in the chunk command queue"
     );
 }
 
@@ -106,10 +89,6 @@ fn map_sdf(p: IVec3) -> Sd8 {
     // sphere(p, 640.0).into()
 }
 
-fn unpadded_chunk_extent(key: ChunkKey) -> Extent3i {
-    Extent3i::from_min_and_shape(key.0 * UNPADDED_CHUNK_SHAPE, UNPADDED_CHUNK_SHAPE)
-}
-
 #[derive(Component)]
 pub struct ChunkGenerationTask(Task<ChunkData>);
 
@@ -120,7 +99,7 @@ fn queue_chunk_generation_tasks(
     let task_pool = AsyncComputeTaskPool::get();
 
     added_chunks.iter().for_each(|(entity, key)| {
-        let unpadded_chunk_extent = unpadded_chunk_extent(*key);
+        let unpadded_chunk_extent = key.extent();
 
         let task = task_pool.spawn(async move {
             let mut chunk_data = ChunkData::empty();
@@ -162,54 +141,63 @@ pub struct ChunkMeshingTask(Task<Option<Mesh>>);
 fn queue_chunk_meshing_tasks(
     mut commands: Commands,
     chunk_map: Res<ChunkMap>,
-    dirty_chunks: Res<DirtyChunks>,
+    mut dirty_chunks: ResMut<DirtyChunks>,
     loaded_chunks: Res<LoadedChunks>,
 ) {
     let task_pool = AsyncComputeTaskPool::get();
 
-    dirty_chunks
-        .iter()
-        .filter_map(|key| loaded_chunks.get_entity(*key).map(|entity| (key, entity)))
-        .filter_map(|(key, entity)| {
-            chunk_map
-                .get(*key)
-                .map(|chunk_data| (chunk_data.clone(), entity))
-        })
-        .for_each(|(chunk_data, entity)| {
-            let task = task_pool.spawn(async move {
-                let mut buffer = SurfaceNetsBuffer::default();
+    let mut processed_chunks = Vec::new();
 
-                surface_nets(
-                    &chunk_data.sdf,
-                    &UnpaddedChunkShape {},
-                    [0; 3],
-                    [UNPADDED_CHUNK_SIDE - 1; 3],
-                    &mut buffer,
-                );
+    for key in dirty_chunks.iter().cloned() {
+        let entity = loaded_chunks.get_entity(key).unwrap();
+        let mut neighbors = chunks_in_extent(&key.extent().padded(1));
 
-                if buffer.positions.is_empty() {
-                    return None;
-                }
+        if !neighbors.all(|k| chunk_map.chunks.contains_key(&k) || !loaded_chunks.contains(k)) {
+            continue;
+        }
 
-                let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
-                mesh.insert_attribute(
-                    Mesh::ATTRIBUTE_POSITION,
-                    VertexAttributeValues::Float32x3(buffer.positions.clone()),
-                );
-                mesh.insert_attribute(
-                    Mesh::ATTRIBUTE_NORMAL,
-                    VertexAttributeValues::Float32x3(buffer.normals.clone()),
-                );
-                mesh.set_indices(Some(Indices::U32(buffer.indices.clone())));
+        processed_chunks.extend(neighbors.filter(|k| !loaded_chunks.contains(*k)));
 
-                // mesh.duplicate_vertices();
-                // mesh.compute_flat_normals();
+        let padded_sdf = copy_chunk_neighborhood(&chunk_map.chunks, key);
+        let task = task_pool.spawn(async move {
+            let mut buffer = SurfaceNetsBuffer::default();
 
-                Some(mesh)
-            });
+            surface_nets(
+                &padded_sdf,
+                &PaddedChunkShape {},
+                [0; 3],
+                [PADDED_CHUNK_SIDE - 1; 3],
+                &mut buffer,
+            );
 
-            commands.entity(entity).insert(ChunkMeshingTask(task));
+            if buffer.positions.is_empty() {
+                return None;
+            }
+
+            let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+            mesh.insert_attribute(
+                Mesh::ATTRIBUTE_POSITION,
+                VertexAttributeValues::Float32x3(buffer.positions.clone()),
+            );
+            mesh.insert_attribute(
+                Mesh::ATTRIBUTE_NORMAL,
+                VertexAttributeValues::Float32x3(buffer.normals.clone()),
+            );
+            mesh.set_indices(Some(Indices::U32(buffer.indices.clone())));
+
+            // mesh.duplicate_vertices();
+            // mesh.compute_flat_normals();
+
+            Some(mesh)
         });
+
+        commands.entity(entity).insert(ChunkMeshingTask(task));
+        processed_chunks.push(key);
+    }
+
+    processed_chunks.into_iter().for_each(|k| {
+        dirty_chunks.remove(k);
+    });
 }
 
 fn handle_chunk_meshing_tasks(
@@ -248,8 +236,4 @@ fn handle_chunk_meshing_tasks(
             }
         }
     });
-}
-
-fn clear_dirty_chunks(mut dirty_chunks: ResMut<DirtyChunks>) {
-    dirty_chunks.clear();
 }

@@ -11,6 +11,7 @@ pub const UNPADDED_CHUNK_SIDE: u32 = 32;
 pub const UNPADDED_CHUNK_SHAPE: IVec3 = IVec3::splat(UNPADDED_CHUNK_SIDE as i32);
 pub type UnpaddedChunkShape =
     ConstShape3u32<UNPADDED_CHUNK_SIDE, UNPADDED_CHUNK_SIDE, UNPADDED_CHUNK_SIDE>;
+pub const UNPADDED_CHUNK_SHAPE_LOG2: IVec3 = IVec3::splat(5);
 pub const UNPADDED_CHUNK_SIZE: usize = UnpaddedChunkShape::SIZE as usize;
 
 pub const CHUNK_PADDING: u32 = 1;
@@ -20,17 +21,6 @@ pub type PaddedChunkShape = ConstShape3u32<PADDED_CHUNK_SIDE, PADDED_CHUNK_SIDE,
 pub const PADDED_CHUNK_SIZE: usize = PaddedChunkShape::SIZE as usize;
 
 pub const DEFAULT_SDF_VALUE: Sd8 = Sd8::MAX;
-
-pub const MESHING_CHUNKS_OFFSET: [IVec3; 8] = [
-    IVec3::new(0, 0, 0),
-    IVec3::new(0, 0, 1),
-    IVec3::new(0, 1, 0),
-    IVec3::new(0, 1, 1),
-    IVec3::new(1, 0, 0),
-    IVec3::new(1, 0, 1),
-    IVec3::new(1, 1, 0),
-    IVec3::new(1, 1, 1),
-];
 
 #[derive(Debug, Clone, Copy, Reflect, FromReflect)]
 pub struct Sd8(pub i8);
