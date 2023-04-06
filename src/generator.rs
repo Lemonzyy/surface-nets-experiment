@@ -149,7 +149,6 @@ fn queue_chunk_meshing_tasks(
     let mut processed_chunks = Vec::new();
 
     for key in dirty_chunks.iter().cloned() {
-        let entity = loaded_chunks.get_entity(key).unwrap();
         let mut neighbors = chunks_in_extent(&key.extent().padded(1));
 
         if !neighbors.all(|k| chunk_map.chunks.contains_key(&k) || !loaded_chunks.contains(k)) {
@@ -191,6 +190,7 @@ fn queue_chunk_meshing_tasks(
             Some(mesh)
         });
 
+        let entity = loaded_chunks.get_entity(key).unwrap();
         commands.entity(entity).insert(ChunkMeshingTask(task));
         processed_chunks.push(key);
     }
