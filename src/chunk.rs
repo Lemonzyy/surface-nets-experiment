@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::constants::*;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ChunkData {
     pub sdf: [Sd8; UNPADDED_CHUNK_SIZE],
 }

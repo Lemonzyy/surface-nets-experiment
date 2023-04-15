@@ -17,7 +17,8 @@ lto = "thin"
 bevy = "0.10.1"
 bevy-inspector-egui = "0.18.3"
 bevy_egui = "0.20.2"
-fast-surface-nets = { git = "https://github.com/Lemonzyy/fast-surface-nets-rs" }
+concurrent-queue = "2.2.0"
+fast-surface-nets = { git = "https://github.com/bonsairobo/fast-surface-nets-rs" }
 float-ord = "0.3.2"
 futures-lite = "1.12.0"
 ilattice = { git = "https://github.com/bonsairobo/ilattice-rs" }

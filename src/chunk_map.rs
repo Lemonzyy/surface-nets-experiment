@@ -11,16 +11,16 @@ use crate::{
 
 #[derive(Resource, Default)]
 pub struct ChunkMap {
-    pub chunks: HashMap<ChunkKey, ChunkData>,
+    pub storage: HashMap<ChunkKey, ChunkData>,
 }
 
 impl ChunkMap {
     pub fn insert(&mut self, key: ChunkKey, chunk: ChunkData) -> Option<ChunkData> {
-        self.chunks.insert(key, chunk)
+        self.storage.insert(key, chunk)
     }
 
     pub fn len(&self) -> usize {
-        self.chunks.len()
+        self.storage.len()
     }
 }
 
@@ -38,10 +38,10 @@ impl ChunkCommandQueue {
 }
 
 #[derive(Resource, Default)]
-pub struct LoadedChunks(HashMap<ChunkKey, Entity>);
+pub struct ChunkEntityRelation(HashMap<ChunkKey, Entity>);
 
-impl LoadedChunks {
-    pub fn insert(&mut self, key: ChunkKey, entity: Entity) {
+impl ChunkEntityRelation {
+    pub fn link(&mut self, key: ChunkKey, entity: Entity) {
         self.0.insert(key, entity);
     }
 
@@ -54,26 +54,8 @@ impl LoadedChunks {
     }
 }
 
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Deref, DerefMut)]
 pub struct DirtyChunks(HashSet<ChunkKey>);
-
-impl DirtyChunks {
-    pub fn insert(&mut self, key: ChunkKey) -> bool {
-        self.0.insert(key)
-    }
-
-    pub fn remove(&mut self, key: ChunkKey) -> bool {
-        self.0.remove(&key)
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &ChunkKey> {
-        self.0.iter()
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-}
 
 pub fn copy_chunk_neighborhood(
     chunks: &HashMap<ChunkKey, ChunkData>,

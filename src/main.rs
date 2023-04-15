@@ -31,7 +31,7 @@ fn main() {
         }))
         .add_plugin(WireframePlugin)
         .add_plugin(EguiPlugin)
-        .add_plugin(WorldInspectorPlugin::new())
+        // .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(LookTransformPlugin)
         .add_plugin(FpsCameraPlugin::default())
         .add_plugin(generator::GeneratorPlugin)
