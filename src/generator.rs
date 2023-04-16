@@ -16,8 +16,8 @@ use rand::Rng;
 use crate::{
     chunk::{ChunkData, ChunkKey},
     chunk_map::{
-        chunks_in_extent, copy_chunk_neighborhood, ChunkCommandQueue, ChunkEntityRelation,
-        ChunkMap, DirtyChunks,
+        chunks_in_extent, copy_chunk_neighborhood, ChunkCommand, ChunkCommandQueue, ChunkMap,
+        CurrentChunks, DirtyChunks,
     },
     constants::*,
     sdf_primitives::{infinite_repetition, sphere},
@@ -30,29 +30,29 @@ impl Plugin for GeneratorPlugin {
         app.register_type::<ChunkKey>()
             .init_resource::<ChunkMap>()
             .init_resource::<ChunkCommandQueue>()
-            .init_resource::<ChunkEntityRelation>()
+            .init_resource::<CurrentChunks>()
             .init_resource::<DirtyChunks>()
             .init_resource::<GenerationResults>()
             .init_resource::<MeshingResults>()
             .add_startup_system(request_chunks)
             .add_systems((
                 spawn_chunk_generation_tasks
-                    .run_if(|r: Res<ChunkCommandQueue>| !r.create.is_empty()),
+                    .run_if(|r: Res<ChunkCommandQueue>| !r.is_create_empty()),
                 handle_chunk_generation_results.run_if(|r: Res<GenerationResults>| !r.is_empty()),
                 spawn_chunk_meshing_tasks.run_if(|r: Res<DirtyChunks>| !r.is_empty()),
                 handle_chunk_meshing_results.run_if(|r: Res<MeshingResults>| !r.is_empty()),
-            ))
-            // TODO: remove this benchmark code
-            .add_system(
-                |mut printed: Local<bool>,
-                 time: Res<Time>,
-                 q: Query<(), (With<ChunkKey>, With<Handle<Mesh>>)>| {
-                    if !*printed && q.iter().len() == 8000 {
-                        info!("took {:?}", time.elapsed());
-                        *printed = true;
-                    }
-                },
-            );
+            ));
+        // TODO: remove this benchmark code
+        // app.add_system(
+        //     |mut printed: Local<bool>,
+        //      time: Res<Time>,
+        //      q: Query<(), (With<ChunkKey>, With<Handle<Mesh>>)>| {
+        //         if !*printed && q.iter().len() == 8000 {
+        //             info!("took {:?}", time.elapsed());
+        //             *printed = true;
+        //         }
+        //     },
+        // );
     }
 }
 
@@ -64,7 +64,7 @@ pub struct MeshingResults(Arc<SegQueue<(Entity, ChunkKey, Mesh)>>);
 
 fn request_chunks(
     mut chunk_command_queue: ResMut<ChunkCommandQueue>,
-    loaded_chunks: Res<ChunkEntityRelation>,
+    current_chunks: Res<CurrentChunks>,
 ) {
     info!(
         "Chunk size: {}x{}x{}",
@@ -79,15 +79,14 @@ fn request_chunks(
 
     let chunk_count = chunks_extent.num_points();
 
-    chunk_command_queue.create.reserve(chunk_count as usize);
-    chunks_extent.iter3().map(ChunkKey::from).for_each(|key| {
-        if loaded_chunks.get_entity(key).is_none() {
-            chunk_command_queue.create.push(key);
-        }
-    });
+    chunks_extent
+        .iter3()
+        .map(ChunkKey::from)
+        .filter(|&k| !current_chunks.contains(k))
+        .for_each(|key| chunk_command_queue.push(ChunkCommand::Create(key)));
 
     // TODO: replace with camera position
-    chunk_command_queue.sort(ChunkKey(IVec3::ZERO));
+    chunk_command_queue.sort_by_distance(ChunkKey(IVec3::ZERO));
 
     let point_count = chunk_count * (UNPADDED_CHUNK_SIZE as u64);
 
@@ -107,14 +106,14 @@ fn map_sdf(p: IVec3) -> Sd8 {
 fn spawn_chunk_generation_tasks(
     mut commands: Commands,
     mut chunk_command_queue: ResMut<ChunkCommandQueue>,
-    mut chunk_entity_relation: ResMut<ChunkEntityRelation>,
+    mut current_chunks: ResMut<CurrentChunks>,
     gen_results: Res<GenerationResults>,
 ) {
     let task_pool = AsyncComputeTaskPool::get();
 
-    chunk_command_queue.create.drain(..).for_each(|key| {
+    chunk_command_queue.drain_create_commands().for_each(|key| {
         let entity = commands.spawn((Name::new("Chunk"), key)).id();
-        chunk_entity_relation.link(key, entity);
+        current_chunks.add(key, entity);
 
         let unpadded_chunk_extent = key.extent();
 
@@ -145,7 +144,7 @@ fn handle_chunk_generation_results(
     gen_results: Res<GenerationResults>,
 ) {
     while let Some((key, chunk_data)) = gen_results.pop() {
-        chunk_map.insert(key, chunk_data);
+        chunk_map.storage.insert(key, chunk_data);
         dirty_chunks.insert(key);
     }
 }
@@ -153,7 +152,7 @@ fn handle_chunk_generation_results(
 fn spawn_chunk_meshing_tasks(
     chunk_map: Res<ChunkMap>,
     mut dirty_chunks: ResMut<DirtyChunks>,
-    loaded_chunks: Res<ChunkEntityRelation>,
+    current_chunks: Res<CurrentChunks>,
     meshing_results: Res<MeshingResults>,
 ) {
     let task_pool = AsyncComputeTaskPool::get();
@@ -162,13 +161,13 @@ fn spawn_chunk_meshing_tasks(
     for &key in dirty_chunks.iter() {
         let mut neighbors = chunks_in_extent(&key.extent().padded(1));
 
-        if !neighbors.all(|k| chunk_map.storage.contains_key(&k) || !loaded_chunks.contains(k)) {
+        if !neighbors.all(|k| chunk_map.storage.contains(k) || !current_chunks.contains(k)) {
             continue;
         }
 
-        processed_chunks.extend(neighbors.filter(|&k| !loaded_chunks.contains(k)));
+        processed_chunks.extend(neighbors.filter(|&k| !current_chunks.contains(k)));
 
-        let entity = loaded_chunks.get_entity(key).unwrap();
+        let entity = current_chunks.get_entity(key).unwrap();
         let padded_sdf = copy_chunk_neighborhood(&chunk_map.storage, key);
 
         let meshing_results = Arc::clone(&meshing_results);

@@ -1,3 +1,5 @@
+use std::vec::Drain;
+
 use bevy::{
     prelude::*,
     utils::{HashMap, HashSet},
@@ -11,37 +13,84 @@ use crate::{
 
 #[derive(Resource, Default)]
 pub struct ChunkMap {
-    pub storage: HashMap<ChunkKey, ChunkData>,
+    pub storage: Storage,
 }
 
-impl ChunkMap {
-    pub fn insert(&mut self, key: ChunkKey, chunk: ChunkData) -> Option<ChunkData> {
-        self.storage.insert(key, chunk)
+#[derive(Default)]
+pub struct Storage(HashMap<ChunkKey, ChunkData>);
+
+impl Storage {
+    pub fn insert(&mut self, key: ChunkKey, chunk: ChunkData) {
+        self.0.insert(key, chunk);
+    }
+
+    pub fn get(&self, key: ChunkKey) -> Option<&ChunkData> {
+        self.0.get(&key)
+    }
+
+    pub fn contains(&self, key: ChunkKey) -> bool {
+        self.0.contains_key(&key)
     }
 
     pub fn len(&self) -> usize {
-        self.storage.len()
+        self.0.len()
     }
 }
 
 #[derive(Resource, Debug, Default)]
 pub struct ChunkCommandQueue {
-    pub create: Vec<ChunkKey>,
-    pub delete: Vec<ChunkKey>,
+    create: Vec<ChunkKey>,
+    delete: Vec<ChunkKey>,
 }
 
 impl ChunkCommandQueue {
-    pub fn sort(&mut self, center: ChunkKey) {
+    pub fn push(&mut self, command: ChunkCommand) {
+        match command {
+            ChunkCommand::Create(key) => self.create.push(key),
+            ChunkCommand::Delete(key) => self.delete.push(key),
+        }
+    }
+
+    pub fn sort_by_distance(&mut self, key: ChunkKey) {
         self.create
-            .sort_unstable_by_key(|k| FloatOrd(k.as_vec3().distance_squared(center.as_vec3())));
+            .sort_unstable_by_key(|k| FloatOrd(k.as_vec3().distance_squared(key.as_vec3())));
+    }
+
+    pub fn is_create_empty(&self) -> bool {
+        self.create.is_empty()
+    }
+
+    pub fn is_delete_empty(&self) -> bool {
+        self.delete.is_empty()
+    }
+
+    pub fn create_len(&self) -> usize {
+        self.create.len()
+    }
+
+    pub fn delete_len(&self) -> usize {
+        self.delete.len()
+    }
+
+    pub fn drain_create_commands(&mut self) -> Drain<ChunkKey> {
+        self.create.drain(..)
+    }
+
+    pub fn drain_delete_commands(&mut self) -> Drain<ChunkKey> {
+        self.delete.drain(..)
     }
 }
 
-#[derive(Resource, Default)]
-pub struct ChunkEntityRelation(HashMap<ChunkKey, Entity>);
+pub enum ChunkCommand {
+    Create(ChunkKey),
+    Delete(ChunkKey),
+}
 
-impl ChunkEntityRelation {
-    pub fn link(&mut self, key: ChunkKey, entity: Entity) {
+#[derive(Resource, Default)]
+pub struct CurrentChunks(HashMap<ChunkKey, Entity>);
+
+impl CurrentChunks {
+    pub fn add(&mut self, key: ChunkKey, entity: Entity) {
         self.0.insert(key, entity);
     }
 
@@ -57,10 +106,7 @@ impl ChunkEntityRelation {
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct DirtyChunks(HashSet<ChunkKey>);
 
-pub fn copy_chunk_neighborhood(
-    chunks: &HashMap<ChunkKey, ChunkData>,
-    key: ChunkKey,
-) -> [Sd8; PADDED_CHUNK_SIZE] {
+pub fn copy_chunk_neighborhood(storage: &Storage, key: ChunkKey) -> [Sd8; PADDED_CHUNK_SIZE] {
     let padded_chunk_extent = key.extent().padded(1);
     let mut neighborhood = [Sd8::default(); PADDED_CHUNK_SIZE];
 
@@ -69,8 +115,8 @@ pub fn copy_chunk_neighborhood(
             let chunk_extent = chunk_key.extent();
             let intersection = padded_chunk_extent.intersection(&chunk_extent);
 
-            chunks
-                .get(&chunk_key)
+            storage
+                .get(chunk_key)
                 .map(|chunk| (chunk_key, intersection, chunk.sdf))
         })
         .map(|(chunk_key, extent, sdf)| {

@@ -3,7 +3,7 @@ use bevy_egui::{egui, EguiContexts};
 
 use crate::{
     chunk::ChunkKey,
-    chunk_map::{ChunkCommandQueue, ChunkMap, DirtyChunks},
+    chunk_map::{ChunkCommand, ChunkCommandQueue, ChunkMap, DirtyChunks},
     generator::{GenerationResults, MeshingResults},
 };
 
@@ -32,11 +32,11 @@ fn ui_debug(
 ) {
     egui::Window::new("Debug").show(contexts.ctx_mut(), |ui| {
         for (k, v) in [
-            ("Chunk creation command", chunk_command_queue.create.len()),
-            ("Chunk deletion command", chunk_command_queue.delete.len()),
+            ("Chunk creation command", chunk_command_queue.create_len()),
+            ("Chunk deletion command", chunk_command_queue.delete_len()),
             ("Added chunk", added_chunk_query.iter().count()),
             ("Dirty chunks", dirty_chunks.len()),
-            ("Chunk map entries", chunk_map.len()),
+            ("Chunk map entries", chunk_map.storage.len()),
             ("Generation results count", gen_results.len()),
             ("Meshing results count", meshing_results.len()),
         ] {
@@ -52,9 +52,8 @@ fn ui_debug(
             ui.add(egui::DragValue::new(&mut ui_state.chunk_key.2));
         });
         if ui.button("Add chunk").clicked() {
-            chunk_command_queue
-                .create
-                .push(ChunkKey(IVec3::from(ui_state.chunk_key)));
+            let chunk_key = ChunkKey(IVec3::from(ui_state.chunk_key));
+            chunk_command_queue.push(ChunkCommand::Create(chunk_key));
         }
     });
 }
