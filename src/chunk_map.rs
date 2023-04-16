@@ -107,7 +107,8 @@ impl CurrentChunks {
 pub struct DirtyChunks(HashSet<ChunkKey>);
 
 pub fn copy_chunk_neighborhood(storage: &Storage, key: ChunkKey) -> [Sd8; PADDED_CHUNK_SIZE] {
-    let padded_chunk_extent = key.extent().padded(1);
+    let _span = trace_span!("copy_chunk_neighborhood").entered();
+    let padded_chunk_extent = key.extent().with_shape(PADDED_CHUNK_SHAPE);
     let mut neighborhood = [Sd8::default(); PADDED_CHUNK_SIZE];
 
     chunks_in_extent(&padded_chunk_extent)

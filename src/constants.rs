@@ -14,8 +14,7 @@ pub type UnpaddedChunkShape =
 pub const UNPADDED_CHUNK_SHAPE_LOG2: IVec3 = IVec3::splat(5);
 pub const UNPADDED_CHUNK_SIZE: usize = UnpaddedChunkShape::SIZE as usize;
 
-pub const CHUNK_PADDING: u32 = 1;
-pub const PADDED_CHUNK_SIDE: u32 = UNPADDED_CHUNK_SIDE + 2 * CHUNK_PADDING;
+pub const PADDED_CHUNK_SIDE: u32 = UNPADDED_CHUNK_SIDE + 2;
 pub const PADDED_CHUNK_SHAPE: IVec3 = IVec3::splat(PADDED_CHUNK_SIDE as i32);
 pub type PaddedChunkShape = ConstShape3u32<PADDED_CHUNK_SIDE, PADDED_CHUNK_SIDE, PADDED_CHUNK_SIDE>;
 pub const PADDED_CHUNK_SIZE: usize = PaddedChunkShape::SIZE as usize;

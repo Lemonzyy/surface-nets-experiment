@@ -159,7 +159,7 @@ fn spawn_chunk_meshing_tasks(
     let mut processed_chunks = Vec::with_capacity(dirty_chunks.len());
 
     for &key in dirty_chunks.iter() {
-        let mut neighbors = chunks_in_extent(&key.extent().padded(1));
+        let mut neighbors = chunks_in_extent(&key.extent().with_shape(PADDED_CHUNK_SHAPE));
 
         if !neighbors.all(|k| chunk_map.storage.contains(k) || !current_chunks.contains(k)) {
             continue;
