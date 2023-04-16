@@ -26,3 +26,11 @@ Infos: Intel(R) Core(TM) i5-4460  CPU @ 3.20GHz, 4 cores, 23.4 GiB of memory
 
     * #### Release
     `took 6.103116472s to generate 8000 chunks (762.890µs / chunk)`
+
+* ### Using `SegQueue` from `crossbeam`
+
+    * #### Debug
+    `took 11.9768596s to generate 8000 chunks (1.49711ms / chunk)`
+
+    * #### Release
+    `took 6.08528958s to generate 8000 chunks (760.661µs / chunk)`

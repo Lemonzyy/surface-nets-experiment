@@ -8,7 +8,7 @@ use bevy::{
     },
     tasks::AsyncComputeTaskPool,
 };
-use concurrent_queue::ConcurrentQueue;
+use crossbeam_queue::SegQueue;
 use fast_surface_nets::{ndshape::ConstShape, surface_nets, SurfaceNetsBuffer};
 
 use rand::Rng;
@@ -56,23 +56,11 @@ impl Plugin for GeneratorPlugin {
     }
 }
 
-#[derive(Resource, Deref)]
-pub struct GenerationResults(Arc<ConcurrentQueue<(ChunkKey, ChunkData)>>);
+#[derive(Resource, Deref, Default)]
+pub struct GenerationResults(Arc<SegQueue<(ChunkKey, ChunkData)>>);
 
-impl Default for GenerationResults {
-    fn default() -> Self {
-        Self(Arc::new(ConcurrentQueue::unbounded()))
-    }
-}
-
-#[derive(Resource, Deref)]
-pub struct MeshingResults(Arc<ConcurrentQueue<(Entity, ChunkKey, Option<Mesh>)>>);
-
-impl Default for MeshingResults {
-    fn default() -> Self {
-        Self(Arc::new(ConcurrentQueue::unbounded()))
-    }
-}
+#[derive(Resource, Deref, Default)]
+pub struct MeshingResults(Arc<SegQueue<(Entity, ChunkKey, Option<Mesh>)>>);
 
 fn request_chunks(
     mut chunk_command_queue: ResMut<ChunkCommandQueue>,
@@ -145,7 +133,7 @@ fn spawn_chunk_generation_tasks(
                     *v = map_sdf(p);
                 });
 
-                gen_results.push((key, chunk_data)).unwrap();
+                gen_results.push((key, chunk_data));
             })
             .detach();
     });
@@ -156,10 +144,10 @@ fn handle_chunk_generation_results(
     mut dirty_chunks: ResMut<DirtyChunks>,
     gen_results: Res<GenerationResults>,
 ) {
-    gen_results.try_iter().for_each(|(key, chunk_data)| {
+    while let Some((key, chunk_data)) = gen_results.pop() {
         chunk_map.insert(key, chunk_data);
         dirty_chunks.insert(key);
-    });
+    }
 }
 
 fn spawn_chunk_meshing_tasks(
@@ -197,7 +185,7 @@ fn spawn_chunk_meshing_tasks(
                 );
 
                 if buffer.positions.is_empty() {
-                    meshing_results.push((entity, key, None)).unwrap();
+                    meshing_results.push((entity, key, None));
                 }
 
                 let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
@@ -214,7 +202,7 @@ fn spawn_chunk_meshing_tasks(
                 // mesh.duplicate_vertices();
                 // mesh.compute_flat_normals();
 
-                meshing_results.push((entity, key, Some(mesh))).unwrap();
+                meshing_results.push((entity, key, Some(mesh)));
             })
             .detach();
 
@@ -232,31 +220,28 @@ fn handle_chunk_meshing_results(
     mut meshes: ResMut<Assets<Mesh>>,
     meshing_results: Res<MeshingResults>,
 ) {
-    meshing_results
-        .try_iter()
-        .filter_map(|(e, k, m)| m.map(|m| (e, k, m)))
-        .for_each(|(entity, key, mesh)| {
-            let mesh = meshes.add(mesh);
-            let material = {
-                let mut rng = rand::thread_rng();
-                let mut m = StandardMaterial::from(Color::rgb(
-                    rng.gen_range(0.0..=1.0),
-                    rng.gen_range(0.0..=1.0),
-                    rng.gen_range(0.0..=1.0),
-                ));
-                m.perceptual_roughness = 0.6;
-                m.metallic = 0.2;
-                materials.add(m)
-            };
+    while let Some((entity, key, Some(mesh))) = meshing_results.pop() {
+        let mesh = meshes.add(mesh);
+        let material = {
+            let mut rng = rand::thread_rng();
+            let mut m = StandardMaterial::from(Color::rgb(
+                rng.gen_range(0.0..=1.0),
+                rng.gen_range(0.0..=1.0),
+                rng.gen_range(0.0..=1.0),
+            ));
+            m.perceptual_roughness = 0.6;
+            m.metallic = 0.2;
+            materials.add(m)
+        };
 
-            let chunk_min = key.0 * UNPADDED_CHUNK_SHAPE;
-            let transform = Transform::from_translation(chunk_min.as_vec3());
+        let chunk_min = key.0 * UNPADDED_CHUNK_SHAPE;
+        let transform = Transform::from_translation(chunk_min.as_vec3());
 
-            commands.entity(entity).insert(PbrBundle {
-                mesh,
-                material,
-                transform,
-                ..Default::default()
-            });
+        commands.entity(entity).insert(PbrBundle {
+            mesh,
+            material,
+            transform,
+            ..Default::default()
         });
+    }
 }
