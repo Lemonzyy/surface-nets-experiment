@@ -60,7 +60,7 @@ impl Plugin for GeneratorPlugin {
 pub struct GenerationResults(Arc<SegQueue<(ChunkKey, ChunkData)>>);
 
 #[derive(Resource, Deref, Default)]
-pub struct MeshingResults(Arc<SegQueue<(Entity, ChunkKey, Option<Mesh>)>>);
+pub struct MeshingResults(Arc<SegQueue<(Entity, ChunkKey, Mesh)>>);
 
 fn request_chunks(
     mut chunk_command_queue: ResMut<ChunkCommandQueue>,
@@ -185,7 +185,7 @@ fn spawn_chunk_meshing_tasks(
                 );
 
                 if buffer.positions.is_empty() {
-                    meshing_results.push((entity, key, None));
+                    return;
                 }
 
                 let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
@@ -202,7 +202,7 @@ fn spawn_chunk_meshing_tasks(
                 // mesh.duplicate_vertices();
                 // mesh.compute_flat_normals();
 
-                meshing_results.push((entity, key, Some(mesh)));
+                meshing_results.push((entity, key, mesh));
             })
             .detach();
 
@@ -220,7 +220,7 @@ fn handle_chunk_meshing_results(
     mut meshes: ResMut<Assets<Mesh>>,
     meshing_results: Res<MeshingResults>,
 ) {
-    while let Some((entity, key, Some(mesh))) = meshing_results.pop() {
+    while let Some((entity, key, mesh)) = meshing_results.pop() {
         let mesh = meshes.add(mesh);
         let material = {
             let mut rng = rand::thread_rng();
