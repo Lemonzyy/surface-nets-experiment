@@ -121,6 +121,7 @@ fn spawn_chunk_generation_tasks(
 
         task_pool
             .spawn(async move {
+                let _span = trace_span!("chunk_generation_task").entered();
                 let mut chunk_data = ChunkData::empty();
 
                 unpadded_chunk_extent.iter3().for_each(|p| {
@@ -173,6 +174,7 @@ fn spawn_chunk_meshing_tasks(
         let meshing_results = Arc::clone(&meshing_results);
         task_pool
             .spawn(async move {
+                let _span = trace_span!("chunk_meshing_task").entered();
                 let mut buffer = SurfaceNetsBuffer::default();
 
                 surface_nets(
