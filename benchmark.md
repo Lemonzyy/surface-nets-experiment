@@ -1,7 +1,7 @@
 # Benchmark
 Infos: Intel(R) Core(TM) i5-4460  CPU @ 3.20GHz, 4 cores, 23.4 GiB of memory
 
-## Chunk generation (1 thread) ([Code](https://github.com/Lemonzyy/terrain-generation/blob/e7e8bc2ac8f0d797de4320b76e2093feb37c8d0c/src/main.rs#L72-L103))
+## Chunk generation (1 thread) ([Code](https://github.com/Lemonzyy/surface-nets-experiment/blob/e7e8bc2ac8f0d797de4320b76e2093feb37c8d0c/src/main.rs#L72-L103))
 
 * ### Debug
 `took 118.35651173s to generate 125000 chunks (946.852µs / chunk)`
