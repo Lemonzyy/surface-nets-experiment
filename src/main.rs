@@ -12,6 +12,7 @@ use bevy::{
         settings::{WgpuFeatures, WgpuSettings},
         RenderPlugin,
     },
+    window::{Cursor, CursorGrabMode},
 };
 
 use smooth_bevy_cameras::{
@@ -22,16 +23,31 @@ use smooth_bevy_cameras::{
 /// 2.0 means half the detail
 ///
 /// TODO: make it dynamic
-const LEVEL_OF_DETAIL: f32 = 1.0;
+const LEVEL_OF_DETAIL: f32 = 5.0;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(RenderPlugin {
-            wgpu_settings: WgpuSettings {
-                features: WgpuFeatures::POLYGON_MODE_LINE,
-                ..Default::default()
-            },
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(RenderPlugin {
+                    wgpu_settings: WgpuSettings {
+                        features: WgpuFeatures::POLYGON_MODE_LINE,
+                        ..Default::default()
+                    },
+                })
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        cursor: {
+                            let mut cursor = Cursor::default();
+                            cursor.visible = false;
+                            cursor.grab_mode = CursorGrabMode::Locked; // currently doesn't work I don't know why :/
+                            cursor
+                        },
+                        ..default()
+                    }),
+                    ..default()
+                }),
+        )
         .add_plugin(WireframePlugin)
         .add_plugin(bevy_egui::EguiPlugin)
         // .add_plugin(bevy_inspector_egui::quick::WorldInspectorPlugin::new())
@@ -41,7 +57,7 @@ fn main() {
         .add_plugin(meshing::MeshingPlugin)
         .add_plugin(debug::DebugPlugin)
         .add_startup_system(setup)
-        .add_system(camera_focus_origin)
+        .add_systems((camera_focus_origin, toggle_cursor_and_camera))
         .run();
 }
 
@@ -87,7 +103,7 @@ fn setup(
 
 fn camera_focus_origin(
     keys: Res<Input<KeyCode>>,
-    mut camera_query: Query<&mut LookTransform, With<FpsCameraController>>,
+    mut cameras: Query<&mut LookTransform, With<FpsCameraController>>,
     mut is_focused: Local<bool>,
 ) {
     if keys.just_pressed(KeyCode::F) {
@@ -95,10 +111,28 @@ fn camera_focus_origin(
     }
 
     if *is_focused {
-        let Ok(mut look_transform) = camera_query.get_single_mut() else {
+        let Ok(mut look_transform) = cameras.get_single_mut() else {
             return;
         };
 
         look_transform.target = Vec3::ZERO;
+    }
+}
+
+fn toggle_cursor_and_camera(
+    keys: Res<Input<KeyCode>>,
+    mut windows: Query<&mut Window>,
+    mut cameras: Query<&mut FpsCameraController>,
+) {
+    if keys.just_pressed(KeyCode::Escape) {
+        let mut window = windows.single_mut();
+        window.cursor.visible = !window.cursor.visible;
+        window.cursor.grab_mode = match window.cursor.grab_mode {
+            CursorGrabMode::None => CursorGrabMode::Locked,
+            CursorGrabMode::Confined | CursorGrabMode::Locked => CursorGrabMode::None,
+        };
+
+        let mut camera = cameras.single_mut();
+        camera.enabled = !camera.enabled;
     }
 }

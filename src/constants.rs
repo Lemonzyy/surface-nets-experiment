@@ -19,21 +19,13 @@ pub const PADDED_CHUNK_SHAPE: IVec3 = IVec3::splat(PADDED_CHUNK_SIDE as i32);
 pub type PaddedChunkShape = ConstShape3u32<PADDED_CHUNK_SIDE, PADDED_CHUNK_SIDE, PADDED_CHUNK_SIDE>;
 pub const PADDED_CHUNK_SIZE: usize = PaddedChunkShape::SIZE as usize;
 
-pub const DEFAULT_SDF_VALUE: Sd8 = Sd8::MAX;
-
 #[derive(Debug, Clone, Copy, Reflect, FromReflect)]
 pub struct Sd8(pub i8);
 
 impl Sd8 {
-    const RESOLUTION: f32 = i8::MAX as f32;
-    const PRECISION: f32 = 1.0 / Self::RESOLUTION;
-    const MAX: Self = Sd8(i8::MAX);
-}
-
-impl Default for Sd8 {
-    fn default() -> Self {
-        DEFAULT_SDF_VALUE
-    }
+    pub const RESOLUTION: f32 = i8::MAX as f32;
+    pub const PRECISION: f32 = 1.0 / Self::RESOLUTION;
+    pub const MAX: Self = Sd8(i8::MAX);
 }
 
 impl From<Sd8> for f32 {

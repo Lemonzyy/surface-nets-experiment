@@ -31,7 +31,7 @@ fn ui_debug(
     mut ui_state: ResMut<DebugUiState>,
     mut chunk_command_queue: ResMut<ChunkCommandQueue>,
     diagnostics: Res<Diagnostics>,
-    added_chunk_query: Query<Entity, Added<ChunkKey>>,
+    added_chunks: Query<Entity, Added<ChunkKey>>,
     dirty_chunks: Res<DirtyChunks>,
     chunk_map: Res<ChunkMap>,
     gen_results: Res<GenerationResults>,
@@ -50,13 +50,13 @@ fn ui_debug(
         ui.separator();
 
         for (k, v) in [
-            ("Chunk creation command", chunk_command_queue.create_len()),
-            ("Chunk deletion command", chunk_command_queue.delete_len()),
-            ("Added chunk", added_chunk_query.iter().count()),
+            ("Chunk creation commands", chunk_command_queue.create_len()),
+            ("Chunk deletion commands", chunk_command_queue.delete_len()),
+            ("Added chunks", added_chunks.iter().count()),
             ("Dirty chunks", dirty_chunks.len()),
             ("Chunk map entries", chunk_map.storage.len()),
-            ("Generation results count", gen_results.len()),
-            ("Meshing results count", meshing_results.len()),
+            ("Generation results", gen_results.len()),
+            ("Meshing results", meshing_results.len()),
         ] {
             ui.label(format!("{k}: {v}"));
         }

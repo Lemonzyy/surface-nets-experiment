@@ -3,8 +3,8 @@ use bevy::math::Vec3;
 #[inline]
 pub fn world(p: Vec3) -> f32 {
     // infinite_repetition(p, Vec3::splat(80.0), |q| sphere(q, 32.0))
-    infinite_repetition(p, Vec3::splat(256.0), |q| sphere(q, 128.0))
-    // sphere(p, 640.0)
+    // infinite_repetition(p, Vec3::splat(256.0), |q| sphere(q, 128.0))
+    sphere(p, 640.0)
 }
 
 #[inline]

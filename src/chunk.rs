@@ -10,7 +10,7 @@ pub struct ChunkData {
 impl ChunkData {
     pub fn empty() -> Self {
         Self {
-            sdf: [DEFAULT_SDF_VALUE; UNPADDED_CHUNK_SIZE],
+            sdf: [Sd8::MAX; UNPADDED_CHUNK_SIZE],
         }
     }
 }
