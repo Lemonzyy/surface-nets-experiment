@@ -1,17 +1,23 @@
-use bevy::prelude::*;
+use bevy::{
+    diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin},
+    prelude::*,
+};
 use bevy_egui::{egui, EguiContexts};
 
 use crate::{
     chunk::ChunkKey,
     chunk_map::{ChunkCommand, ChunkCommandQueue, ChunkMap, DirtyChunks},
-    generator::{GenerationResults, MeshingResults},
+    generation::GenerationResults,
+    meshing::MeshingResults,
 };
 
 pub struct DebugPlugin;
 
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<DebugUiState>().add_system(ui_debug);
+        app.add_plugin(FrameTimeDiagnosticsPlugin)
+            .init_resource::<DebugUiState>()
+            .add_system(ui_debug);
     }
 }
 
@@ -24,6 +30,7 @@ fn ui_debug(
     mut contexts: EguiContexts,
     mut ui_state: ResMut<DebugUiState>,
     mut chunk_command_queue: ResMut<ChunkCommandQueue>,
+    diagnostics: Res<Diagnostics>,
     added_chunk_query: Query<Entity, Added<ChunkKey>>,
     dirty_chunks: Res<DirtyChunks>,
     chunk_map: Res<ChunkMap>,
@@ -31,6 +38,17 @@ fn ui_debug(
     meshing_results: Res<MeshingResults>,
 ) {
     egui::Window::new("Debug").show(contexts.ctx_mut(), |ui| {
+        ui.label(format!(
+            "Average FPS: {:.02}",
+            diagnostics
+                .get(FrameTimeDiagnosticsPlugin::FPS)
+                .unwrap()
+                .average()
+                .unwrap_or_default()
+        ));
+
+        ui.separator();
+
         for (k, v) in [
             ("Chunk creation command", chunk_command_queue.create_len()),
             ("Chunk deletion command", chunk_command_queue.delete_len()),

@@ -3196,6 +3196,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e08d8363704e6c71fc928674353e6b7c23dcea9d82d7012c8faf2a3a025f8d0"
 
 [[package]]
+name = "surface-nets-experiment"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy-inspector-egui",
+ "bevy_egui",
+ "crossbeam-queue",
+ "fast-surface-nets",
+ "float-ord",
+ "futures-lite",
+ "ilattice",
+ "ndcopy",
+ "noise",
+ "rand 0.8.5",
+ "simdnoise",
+ "smooth-bevy-cameras",
+]
+
+[[package]]
 name = "svg_fmt"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3255,25 +3274,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be55cf8942feac5c765c2c993422806843c9a9a45d4d5c407ad6dd2ea95eb9b6"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "terrain-generation"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bevy-inspector-egui",
- "bevy_egui",
- "crossbeam-queue",
- "fast-surface-nets",
- "float-ord",
- "futures-lite",
- "ilattice",
- "ndcopy",
- "noise",
- "rand 0.8.5",
- "simdnoise",
- "smooth-bevy-cameras",
 ]
 
 [[package]]

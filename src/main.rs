@@ -2,8 +2,8 @@ mod chunk;
 mod chunk_map;
 mod constants;
 mod debug;
-mod generator;
-mod sdf_primitives;
+mod generation;
+mod meshing;
 
 use bevy::{
     pbr::wireframe::WireframePlugin,
@@ -13,13 +13,16 @@ use bevy::{
         RenderPlugin,
     },
 };
-use bevy_egui::EguiPlugin;
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 use smooth_bevy_cameras::{
     controllers::fps::{FpsCameraBundle, FpsCameraController, FpsCameraPlugin},
     LookTransform, LookTransformPlugin,
 };
+
+/// 2.0 means half the detail
+/// 
+/// TODO: make it dynamic
+const LEVEL_OF_DETAIL: f32 = 1.0;
 
 fn main() {
     App::new()
@@ -30,11 +33,12 @@ fn main() {
             },
         }))
         .add_plugin(WireframePlugin)
-        .add_plugin(EguiPlugin)
-        // .add_plugin(WorldInspectorPlugin::new())
+        .add_plugin(bevy_egui::EguiPlugin)
+        // .add_plugin(bevy_inspector_egui::quick::WorldInspectorPlugin::new())
         .add_plugin(LookTransformPlugin)
         .add_plugin(FpsCameraPlugin::default())
-        .add_plugin(generator::GeneratorPlugin)
+        .add_plugin(generation::GenerationPlugin)
+        .add_plugin(meshing::MeshingPlugin)
         .add_plugin(debug::DebugPlugin)
         .add_startup_system(setup)
         .add_system(camera_focus_origin)
