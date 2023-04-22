@@ -114,7 +114,7 @@ fn spawn_chunk_generation_tasks(
                     let v = &mut chunk_data.sdf
                         [UnpaddedChunkShape::linearize(p_in_chunk.as_uvec3().to_array()) as usize];
 
-                    *v = sdf::world(p.as_vec3() * LEVEL_OF_DETAIL);
+                    *v = Sd8::from(sdf::world(p.as_vec3() * LEVEL_OF_DETAIL) / LEVEL_OF_DETAIL);
                 });
 
                 gen_results.push((key, chunk_data));

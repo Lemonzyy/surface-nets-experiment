@@ -1,11 +1,10 @@
 use bevy::math::Vec3;
 
-use crate::constants::Sd8;
-
-pub fn world(p: Vec3) -> Sd8 {
-    infinite_repetition(p, Vec3::splat(80.0), |q| sphere(q, 32.0)).into()
-    // infinite_repetition(p, Vec3::splat(256.0), |q| sphere(q, 128.0)).into()
-    // sphere(p, 640.0).into()
+#[inline]
+pub fn world(p: Vec3) -> f32 {
+    // infinite_repetition(p, Vec3::splat(80.0), |q| sphere(q, 32.0))
+    infinite_repetition(p, Vec3::splat(256.0), |q| sphere(q, 128.0))
+    // sphere(p, 640.0)
 }
 
 #[inline]

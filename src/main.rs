@@ -20,7 +20,7 @@ use smooth_bevy_cameras::{
 };
 
 /// 2.0 means half the detail
-/// 
+///
 /// TODO: make it dynamic
 const LEVEL_OF_DETAIL: f32 = 1.0;
 
