@@ -63,13 +63,13 @@ fn ui_debug(
 
         ui.separator();
 
-        ui.label("Configure chunk:");
+        ui.label("Chunk key:");
         ui.horizontal(|ui| {
             ui.add(egui::DragValue::new(&mut ui_state.chunk_key.0));
             ui.add(egui::DragValue::new(&mut ui_state.chunk_key.1));
             ui.add(egui::DragValue::new(&mut ui_state.chunk_key.2));
         });
-        if ui.button("Add chunk").clicked() {
+        if ui.button("Add").clicked() {
             let chunk_key = ChunkKey(IVec3::from(ui_state.chunk_key));
             chunk_command_queue.push(ChunkCommand::Create(chunk_key));
         }

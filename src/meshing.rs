@@ -14,9 +14,8 @@ use fast_surface_nets::{surface_nets, SurfaceNetsBuffer};
 use rand::Rng;
 
 use crate::{
-    chunk::ChunkKey,
-    chunk_map::{chunks_in_extent, copy_chunk_neighborhood, ChunkMap, CurrentChunks, DirtyChunks},
-    constants::*,
+    chunk::{ChunkKey, PaddedChunkShape, CHUNK_SHAPE, PADDED_CHUNK_SHAPE, PADDED_CHUNK_SIDE},
+    chunk_map::{chunks_in_extent, ChunkMap, CurrentChunks, DirtyChunks},
     LEVEL_OF_DETAIL,
 };
 
@@ -62,14 +61,14 @@ fn spawn_chunk_meshing_tasks(
     for &key in dirty_chunks.iter() {
         let mut neighbors = chunks_in_extent(&key.extent().with_shape(PADDED_CHUNK_SHAPE));
 
-        if !neighbors.all(|k| chunk_map.storage.contains(k) || !current_chunks.contains(k)) {
+        if !neighbors.all(|k| chunk_map.storage.contains_key(&k) || !current_chunks.contains(k)) {
             continue;
         }
 
         processed_chunks.extend(neighbors.filter(|&k| !current_chunks.contains(k)));
 
         let entity = current_chunks.get_entity(key).unwrap();
-        let padded_sdf = copy_chunk_neighborhood(&chunk_map.storage, key);
+        let padded_sdf = chunk_map.copy_chunk_neighborhood(key);
 
         let meshing_results = Arc::clone(&meshing_results);
         meshing_pool
@@ -126,16 +125,16 @@ fn handle_chunk_meshing_results(
         let material = {
             let mut rng = rand::thread_rng();
             let mut m = StandardMaterial::from(Color::rgb(
-                rng.gen_range(0.0..=1.0),
-                rng.gen_range(0.0..=1.0),
-                rng.gen_range(0.0..=1.0),
+                rng.gen_range(0.0..=1.0), //0.168 ,
+                rng.gen_range(0.0..=1.0), //0.133 ,
+                rng.gen_range(0.0..=1.0), //0.102 ,
             ));
             m.perceptual_roughness = 0.6;
             m.metallic = 0.2;
             materials.add(m)
         };
 
-        let chunk_min = key.0 * UNPADDED_CHUNK_SHAPE;
+        let chunk_min = key.0 * CHUNK_SHAPE;
         let transform = Transform::from_translation(chunk_min.as_vec3() * LEVEL_OF_DETAIL)
             .with_scale(Vec3::splat(LEVEL_OF_DETAIL));
 

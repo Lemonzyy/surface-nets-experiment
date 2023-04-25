@@ -1,3 +1,4 @@
+mod generator;
 mod sdf;
 
 use std::sync::Arc;
@@ -10,9 +11,9 @@ use crossbeam_queue::SegQueue;
 use fast_surface_nets::ndshape::ConstShape;
 
 use crate::{
-    chunk::{ChunkData, ChunkKey},
+    chunk::{Chunk, ChunkKey, ChunkShape, Extent3i, CHUNK_SIZE},
     chunk_map::{ChunkCommand, ChunkCommandQueue, ChunkMap, CurrentChunks, DirtyChunks},
-    constants::*,
+    generation::generator::GENERATOR,
     LEVEL_OF_DETAIL,
 };
 
@@ -50,7 +51,7 @@ impl Default for GenerationTaskPool {
 }
 
 #[derive(Resource, Deref, Default)]
-pub struct GenerationResults(Arc<SegQueue<(ChunkKey, ChunkData)>>);
+pub struct GenerationResults(Arc<SegQueue<(ChunkKey, Chunk)>>);
 
 fn request_chunks(
     mut chunk_command_queue: ResMut<ChunkCommandQueue>,
@@ -58,9 +59,9 @@ fn request_chunks(
 ) {
     info!(
         "Chunk size: {}x{}x{}",
-        UnpaddedChunkShape::ARRAY[0],
-        UnpaddedChunkShape::ARRAY[1],
-        UnpaddedChunkShape::ARRAY[2],
+        ChunkShape::ARRAY[0],
+        ChunkShape::ARRAY[1],
+        ChunkShape::ARRAY[2],
     );
 
     let chunks_extent = Extent3i::from_min_and_lub(
@@ -81,7 +82,7 @@ fn request_chunks(
     // TODO: replace with camera position
     chunk_command_queue.sort_by_distance(ChunkKey(IVec3::ZERO));
 
-    let point_count = chunk_count * (UNPADDED_CHUNK_SIZE as u64);
+    let point_count = chunk_count * (CHUNK_SIZE as u64);
 
     info!(
         "Requested {chunk_count} chunk creation ({point_count} points) in the chunk command queue"
@@ -99,28 +100,16 @@ fn spawn_chunk_generation_tasks(
         let entity = commands.spawn((Name::new("Chunk"), key)).id();
         current_chunks.add(key, entity);
 
-        let unpadded_chunk_extent = key.extent();
-
         let gen_results = Arc::clone(&gen_results);
 
         gen_pool
             .spawn(async move {
                 let _span = trace_span!("chunk_generation_task").entered();
-                let mut chunk_data = ChunkData::empty();
-
-                unpadded_chunk_extent.iter3().for_each(|p| {
-                    let p_in_chunk = p - unpadded_chunk_extent.minimum;
-
-                    let v = &mut chunk_data.sdf
-                        [UnpaddedChunkShape::linearize(p_in_chunk.as_uvec3().to_array()) as usize];
-
-                    *v = Sd8::from(sdf::world(p.as_vec3() * LEVEL_OF_DETAIL) / LEVEL_OF_DETAIL);
-                });
-
+                let chunk_data = GENERATOR.compute_chunk(key);
                 gen_results.push((key, chunk_data));
             })
             .detach();
-    });
+    });*
 }
 
 fn handle_chunk_generation_results(

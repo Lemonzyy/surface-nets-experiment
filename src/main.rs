@@ -1,6 +1,5 @@
 mod chunk;
 mod chunk_map;
-mod constants;
 mod debug;
 mod generation;
 mod meshing;
@@ -23,7 +22,7 @@ use smooth_bevy_cameras::{
 /// 2.0 means half the detail
 ///
 /// TODO: make it dynamic
-const LEVEL_OF_DETAIL: f32 = 5.0;
+const LEVEL_OF_DETAIL: f32 = 1.0;
 
 fn main() {
     App::new()
@@ -88,7 +87,7 @@ fn setup(
                 translate_sensitivity: 150.0,
                 ..default()
             },
-            Vec3::splat(750.0),
+            Vec3::splat(500.0),
             Vec3::ZERO,
             Vec3::Y,
         ));

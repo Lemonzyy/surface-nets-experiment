@@ -6,34 +6,54 @@ use bevy::{
 };
 use float_ord::FloatOrd;
 
-use crate::{
-    chunk::{ChunkData, ChunkKey},
-    constants::*,
+use crate::chunk::{
+    Chunk, ChunkKey, ChunkShape, Extent3i, PaddedChunkShape, Sd8, CHUNK_SHAPE_LOG2,
+    PADDED_CHUNK_SHAPE, PADDED_CHUNK_SIZE,
 };
 
 #[derive(Resource, Default)]
 pub struct ChunkMap {
-    pub storage: Storage,
+    pub storage: HashMap<ChunkKey, Chunk>,
 }
 
-#[derive(Default)]
-pub struct Storage(HashMap<ChunkKey, ChunkData>);
+impl ChunkMap {
+    pub fn copy_chunk_neighborhood(&self, key: ChunkKey) -> [Sd8; PADDED_CHUNK_SIZE] {
+        let _span = trace_span!("copy_chunk_neighborhood").entered();
+        let padded_chunk_extent = key.extent().with_shape(PADDED_CHUNK_SHAPE);
+        let mut neighborhood = [Sd8::MAX; PADDED_CHUNK_SIZE];
 
-impl Storage {
-    pub fn insert(&mut self, key: ChunkKey, chunk: ChunkData) {
-        self.0.insert(key, chunk);
-    }
+        chunks_in_extent(&padded_chunk_extent)
+            .filter_map(|chunk_key| {
+                let chunk_extent = chunk_key.extent();
+                let intersection = padded_chunk_extent.intersection(&chunk_extent);
 
-    pub fn get(&self, key: ChunkKey) -> Option<&ChunkData> {
-        self.0.get(&key)
-    }
+                self.storage
+                    .get(&chunk_key)
+                    .map(|chunk| (chunk_key, intersection, chunk.sdf))
+            })
+            .map(|(chunk_key, extent, sdf)| {
+                let copy_shape = extent.shape.as_uvec3().to_array();
+                let src_start = (extent.minimum - chunk_key.min_point())
+                    .as_uvec3()
+                    .to_array();
+                let dst_start = (extent.minimum - padded_chunk_extent.minimum)
+                    .as_uvec3()
+                    .to_array();
+                (copy_shape, sdf, src_start, dst_start)
+            })
+            .for_each(|(copy_shape, sdf, src_start, dst_start)| {
+                ndcopy::copy3(
+                    copy_shape,
+                    &sdf,
+                    &ChunkShape {},
+                    src_start,
+                    &mut neighborhood,
+                    &PaddedChunkShape {},
+                    dst_start,
+                );
+            });
 
-    pub fn contains(&self, key: ChunkKey) -> bool {
-        self.0.contains_key(&key)
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
+        neighborhood
     }
 }
 
@@ -106,48 +126,9 @@ impl CurrentChunks {
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct DirtyChunks(HashSet<ChunkKey>);
 
-pub fn copy_chunk_neighborhood(storage: &Storage, key: ChunkKey) -> [Sd8; PADDED_CHUNK_SIZE] {
-    let _span = trace_span!("copy_chunk_neighborhood").entered();
-    let padded_chunk_extent = key.extent().with_shape(PADDED_CHUNK_SHAPE);
-    let mut neighborhood = [Sd8::MAX; PADDED_CHUNK_SIZE];
-
-    chunks_in_extent(&padded_chunk_extent)
-        .filter_map(|chunk_key| {
-            let chunk_extent = chunk_key.extent();
-            let intersection = padded_chunk_extent.intersection(&chunk_extent);
-
-            storage
-                .get(chunk_key)
-                .map(|chunk| (chunk_key, intersection, chunk.sdf))
-        })
-        .map(|(chunk_key, extent, sdf)| {
-            let copy_shape = extent.shape.as_uvec3().to_array();
-            let src_start = (extent.minimum - chunk_key.min_point())
-                .as_uvec3()
-                .to_array();
-            let dst_start = (extent.minimum - padded_chunk_extent.minimum)
-                .as_uvec3()
-                .to_array();
-            (copy_shape, sdf, src_start, dst_start)
-        })
-        .for_each(|(copy_shape, sdf, src_start, dst_start)| {
-            ndcopy::copy3(
-                copy_shape,
-                &sdf,
-                &UnpaddedChunkShape {},
-                src_start,
-                &mut neighborhood,
-                &PaddedChunkShape {},
-                dst_start,
-            );
-        });
-
-    neighborhood
-}
-
 pub fn chunks_in_extent(extent: &Extent3i) -> impl Iterator<Item = ChunkKey> {
-    let range_min = extent.minimum >> UNPADDED_CHUNK_SHAPE_LOG2;
-    let range_max = extent.max() >> UNPADDED_CHUNK_SHAPE_LOG2;
+    let range_min = extent.minimum >> CHUNK_SHAPE_LOG2;
+    let range_max = extent.max() >> CHUNK_SHAPE_LOG2;
 
     Extent3i::from_min_and_max(range_min, range_max)
         .iter3()
