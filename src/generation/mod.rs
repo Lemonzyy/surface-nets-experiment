@@ -109,7 +109,7 @@ fn spawn_chunk_generation_tasks(
                 gen_results.push((key, chunk_data));
             })
             .detach();
-    });*
+    });
 }
 
 fn handle_chunk_generation_results(
