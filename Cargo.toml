@@ -15,8 +15,8 @@ lto = "thin"
 
 [dependencies]
 bevy = "0.10.1"
-bevy-inspector-egui = "0.18.3"
 bevy_egui = "0.20.2"
+bevy-inspector-egui = "0.18.3"
 bracket-noise = "0.8.7"
 crossbeam-queue = "0.3.8"
 fast-surface-nets = { git = "https://github.com/bonsairobo/fast-surface-nets-rs" }
@@ -28,3 +28,4 @@ once_cell = "1.17.1"
 rand = "0.8.5"
 simdnoise = "3.1.6"
 smooth-bevy-cameras = "0.8.0"
+tracing = "0.1"

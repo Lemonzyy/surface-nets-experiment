@@ -9,6 +9,7 @@ use bevy::{
 };
 use crossbeam_queue::SegQueue;
 use fast_surface_nets::ndshape::ConstShape;
+use tracing::Instrument;
 
 use crate::{
     chunk::{Chunk, ChunkKey, ChunkShape, Extent3i, CHUNK_SIZE},
@@ -103,11 +104,13 @@ fn spawn_chunk_generation_tasks(
         let gen_results = Arc::clone(&gen_results);
 
         gen_pool
-            .spawn(async move {
-                let _span = trace_span!("chunk_generation_task").entered();
-                let chunk_data = GENERATOR.compute_chunk(key);
-                gen_results.push((key, chunk_data));
-            })
+            .spawn(
+                async move {
+                    let chunk_data = GENERATOR.generate_chunk(key);
+                    gen_results.push((key, chunk_data));
+                }
+                .instrument(trace_span!("chunk_generation_task")),
+            )
             .detach();
     });
 }

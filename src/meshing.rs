@@ -12,6 +12,7 @@ use crossbeam_queue::SegQueue;
 use fast_surface_nets::{surface_nets, SurfaceNetsBuffer};
 
 use rand::Rng;
+use tracing::Instrument;
 
 use crate::{
     chunk::{ChunkKey, PaddedChunkShape, CHUNK_SHAPE, PADDED_CHUNK_SHAPE, PADDED_CHUNK_SIDE},
@@ -72,38 +73,40 @@ fn spawn_chunk_meshing_tasks(
 
         let meshing_results = Arc::clone(&meshing_results);
         meshing_pool
-            .spawn(async move {
-                let _span = trace_span!("chunk_meshing_task").entered();
-                let mut buffer = SurfaceNetsBuffer::default();
+            .spawn(
+                async move {
+                    let mut buffer = SurfaceNetsBuffer::default();
 
-                surface_nets(
-                    &padded_sdf,
-                    &PaddedChunkShape {},
-                    [0; 3],
-                    [PADDED_CHUNK_SIDE - 1; 3],
-                    &mut buffer,
-                );
+                    surface_nets(
+                        &padded_sdf,
+                        &PaddedChunkShape {},
+                        [0; 3],
+                        [PADDED_CHUNK_SIDE - 1; 3],
+                        &mut buffer,
+                    );
 
-                if buffer.positions.is_empty() {
-                    return;
+                    if buffer.positions.is_empty() {
+                        return;
+                    }
+
+                    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+                    mesh.insert_attribute(
+                        Mesh::ATTRIBUTE_POSITION,
+                        VertexAttributeValues::Float32x3(buffer.positions.clone()),
+                    );
+                    mesh.insert_attribute(
+                        Mesh::ATTRIBUTE_NORMAL,
+                        VertexAttributeValues::Float32x3(buffer.normals.clone()),
+                    );
+                    mesh.set_indices(Some(Indices::U32(buffer.indices.clone())));
+
+                    // mesh.duplicate_vertices();
+                    // mesh.compute_flat_normals();
+
+                    meshing_results.push((entity, key, mesh));
                 }
-
-                let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
-                mesh.insert_attribute(
-                    Mesh::ATTRIBUTE_POSITION,
-                    VertexAttributeValues::Float32x3(buffer.positions.clone()),
-                );
-                mesh.insert_attribute(
-                    Mesh::ATTRIBUTE_NORMAL,
-                    VertexAttributeValues::Float32x3(buffer.normals.clone()),
-                );
-                mesh.set_indices(Some(Indices::U32(buffer.indices.clone())));
-
-                // mesh.duplicate_vertices();
-                // mesh.compute_flat_normals();
-
-                meshing_results.push((entity, key, mesh));
-            })
+                .instrument(trace_span!("chunk_meshing_task")),
+            )
             .detach();
 
         processed_chunks.push(key);

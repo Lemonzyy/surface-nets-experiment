@@ -5,6 +5,7 @@ use bevy::{
     utils::{HashMap, HashSet},
 };
 use float_ord::FloatOrd;
+use tracing::instrument;
 
 use crate::chunk::{
     Chunk, ChunkKey, ChunkShape, Extent3i, PaddedChunkShape, Sd8, CHUNK_SHAPE_LOG2,
@@ -17,8 +18,8 @@ pub struct ChunkMap {
 }
 
 impl ChunkMap {
+    #[instrument(skip_all, level = "trace")]
     pub fn copy_chunk_neighborhood(&self, key: ChunkKey) -> [Sd8; PADDED_CHUNK_SIZE] {
-        let _span = trace_span!("copy_chunk_neighborhood").entered();
         let padded_chunk_extent = key.extent().with_shape(PADDED_CHUNK_SHAPE);
         let mut neighborhood = [Sd8::MAX; PADDED_CHUNK_SIZE];
 
