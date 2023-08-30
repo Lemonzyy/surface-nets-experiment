@@ -47,16 +47,17 @@ fn main() {
                     ..default()
                 }),
         )
-        .add_plugin(WireframePlugin)
-        .add_plugin(bevy_egui::EguiPlugin)
-        // .add_plugin(bevy_inspector_egui::quick::WorldInspectorPlugin::new())
-        .add_plugin(LookTransformPlugin)
-        .add_plugin(FpsCameraPlugin::default())
-        .add_plugin(generation::GenerationPlugin)
-        .add_plugin(meshing::MeshingPlugin)
-        .add_plugin(debug::DebugPlugin)
-        .add_startup_system(setup)
-        .add_systems((camera_focus_origin, toggle_cursor_and_camera))
+        .add_plugins((
+            WireframePlugin,
+            bevy_egui::EguiPlugin,
+            LookTransformPlugin,
+            FpsCameraPlugin::default(),
+            generation::GenerationPlugin,
+            meshing::MeshingPlugin,
+            debug::DebugPlugin,
+        ))
+        .add_systems(Startup, setup)
+        .add_systems(Update, (camera_focus_origin, toggle_cursor_and_camera))
         .run();
 }
 

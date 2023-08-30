@@ -1,5 +1,5 @@
 use bevy::{
-    diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin},
+    diagnostic::{Diagnostics, DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     prelude::*,
 };
 use bevy_egui::{egui, EguiContexts};
@@ -15,9 +15,9 @@ pub struct DebugPlugin;
 
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(FrameTimeDiagnosticsPlugin)
+        app.add_plugins(FrameTimeDiagnosticsPlugin)
             .init_resource::<DebugUiState>()
-            .add_system(ui_debug);
+            .add_systems(Update, ui_debug);
     }
 }
 
@@ -30,7 +30,7 @@ fn ui_debug(
     mut contexts: EguiContexts,
     mut ui_state: ResMut<DebugUiState>,
     mut chunk_command_queue: ResMut<ChunkCommandQueue>,
-    diagnostics: Res<Diagnostics>,
+    diagnostics: Res<DiagnosticsStore>,
     added_chunks: Query<Entity, Added<ChunkKey>>,
     dirty_chunks: Res<DirtyChunks>,
     chunk_map: Res<ChunkMap>,
