@@ -18,7 +18,7 @@ pub const PADDED_CHUNK_SHAPE: IVec3 = IVec3::splat(PADDED_CHUNK_SIDE as i32);
 pub type PaddedChunkShape = ConstShape3u32<PADDED_CHUNK_SIDE, PADDED_CHUNK_SIDE, PADDED_CHUNK_SIDE>;
 pub const PADDED_CHUNK_SIZE: usize = PaddedChunkShape::SIZE as usize;
 
-#[derive(Debug, Clone, Copy, Reflect, FromReflect)]
+#[derive(Debug, Clone, Copy, Reflect)]
 pub struct Sd8(pub i8);
 
 impl Sd8 {

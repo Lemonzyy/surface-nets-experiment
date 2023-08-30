@@ -26,10 +26,13 @@ impl Plugin for MeshingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<MeshingTaskPool>()
             .init_resource::<MeshingResults>()
-            .add_systems((
-                spawn_chunk_meshing_tasks.run_if(|r: Res<DirtyChunks>| !r.is_empty()),
-                handle_chunk_meshing_results.run_if(|r: Res<MeshingResults>| !r.is_empty()),
-            ));
+            .add_systems(
+                Update,
+                (
+                    spawn_chunk_meshing_tasks.run_if(|r: Res<DirtyChunks>| !r.is_empty()),
+                    handle_chunk_meshing_results.run_if(|r: Res<MeshingResults>| !r.is_empty()),
+                ),
+            );
     }
 }
 

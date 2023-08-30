@@ -28,12 +28,16 @@ impl Plugin for GenerationPlugin {
             .init_resource::<DirtyChunks>()
             .init_resource::<GenerationTaskPool>()
             .init_resource::<GenerationResults>()
-            .add_startup_system(request_chunks)
-            .add_systems((
-                spawn_chunk_generation_tasks
-                    .run_if(|r: Res<ChunkCommandQueue>| !r.is_create_empty()),
-                handle_chunk_generation_results.run_if(|r: Res<GenerationResults>| !r.is_empty()),
-            ));
+            .add_systems(Startup, request_chunks)
+            .add_systems(
+                Update,
+                (
+                    spawn_chunk_generation_tasks
+                        .run_if(|r: Res<ChunkCommandQueue>| !r.is_create_empty()),
+                    handle_chunk_generation_results
+                        .run_if(|r: Res<GenerationResults>| !r.is_empty()),
+                ),
+            );
     }
 }
 
